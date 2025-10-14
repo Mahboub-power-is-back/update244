@@ -79,7 +79,7 @@ rm -f setup.sh && sysctl -w net.ipv6.conf.all.disable_ipv6=1 && sysctl -w net.ip
 
 • XRAYS Vless None TLS    : 80
 
-• XRAYS Trojan            : 2083
+• XRAYS Trojan ws TLS     : 8443
 
 • Websocket TLS           : 443
 
