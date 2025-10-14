@@ -31,7 +31,7 @@ exit 0
 fi
 # ==================================================
 # Link Hosting Kalian
-akbarvpn="raw.githubusercontent.com/senowahyu62/scriptvps/main/wireguard"
+akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/wireguard"
 
 # Check OS version
 if [[ -e /etc/debian_version ]]; then
