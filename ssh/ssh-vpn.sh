@@ -126,6 +126,7 @@ apt install zlib1g-dev -y
 apt install libssl-dev -y
 apt install libssl1.0-dev -y
 apt install dos2unix -y
+apt install stunnel4 -y
 
 # set time GMT +7
 ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
@@ -298,7 +299,7 @@ Wants=network-online.target
 
 [Service]
 Type=forking
-ExecStart=/usr/bin/stunnel5 /etc/stunnel5/stunnel5.conf
+ExecStart=/usr/bin/stunnel4 /etc/stunnel5/stunnel5.conf
 PIDFile=/var/run/stunnel5.pid
 Restart=on-failure
 
