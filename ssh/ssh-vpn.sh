@@ -177,11 +177,16 @@ sed -i 's/Port 22/Port 22/g' /etc/ssh/sshd_config
 
 # install dropbear
 apt -y install dropbear
-sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
-sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
-sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 109 -p 143"/g' /etc/default/dropbear
-echo "/bin/false" >> /etc/shells
-echo "/usr/sbin/nologin" >> /etc/shells
+sudo tee /etc/default/dropbear > /dev/null <<'EOF'
+# /etc/default/dropbear - minimal safe config
+# Disable default single DROPBEAR_PORT (we use EXTRA_ARGS)
+DROPBEAR_PORT=0
+# Listen on 109 and 143 (add "-p 22" here if you stopped sshd and want 22)
+DROPBEAR_EXTRA_ARGS="-p 109 -p 143"
+# Banner file (leave empty or set path to valid file)
+DROPBEAR_BANNER=""
+DROPBEAR_RECEIVE_WINDOW=65536
+EOF
 /etc/init.d/dropbear restart
 
 # install squid
