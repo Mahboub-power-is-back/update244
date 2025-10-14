@@ -283,7 +283,9 @@ accept = 990
 connect = 127.0.0.1:1194
 
 END
-
+sudo systemctl cat stunnel5
+which stunnel5 || which stunnel || which stunnel4 || true
+ls -l /usr/local/bin/stunnel5 /usr/local/bin/stunnel /usr/bin/stunnel4 /usr/bin/stunnel /usr/bin/stunnel5 2>/dev/null || true
 # make a certificate
 #openssl genrsa -out key.pem 2048
 #openssl req -new -x509 -key key.pem -out cert.pem -days 1095 \
