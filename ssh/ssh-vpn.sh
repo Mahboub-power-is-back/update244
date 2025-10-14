@@ -308,8 +308,8 @@ WantedBy=multi-user.target
 EOF
 
 # fallback if stunnel5 binary missing
-if [ ! -x /usr/local/bin/stunnel5 ] && [ -x /usr/local/bin/stunnel ]; then
-  cp /usr/local/bin/stunnel /usr/local/bin/stunnel5
+if [ ! -x /usr/bin/stunnel5 ] && [ -x /usr/bin/stunnel ]; then
+  cp /usr/bin/stunnel4 /usr/bin/stunnel5
 fi
 
 systemctl daemon-reload
@@ -321,15 +321,15 @@ wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
 # Ubah Izin Akses
 chmod 600 /etc/stunnel5/stunnel5.pem
 chmod +x /etc/init.d/stunnel5
-cp /usr/local/bin/stunnel /usr/local/bin/stunnel5
+cp /usr/bin/stunnel /usr/bin/stunnel5
 
 # Remove File
 rm -r -f /usr/local/share/doc/stunnel/
 rm -r -f /usr/local/etc/stunnel/
-rm -f /usr/local/bin/stunnel
-rm -f /usr/local/bin/stunnel3
-rm -f /usr/local/bin/stunnel4
-#rm -f /usr/local/bin/stunnel5
+rm -f /usr/bin/stunnel
+rm -f /usr/bin/stunnel3
+rm -f /usr/bin/stunnel4
+#rm -f /usr/bin/stunnel5
 
 # Restart Stunnel 5
 systemctl stop stunnel5
