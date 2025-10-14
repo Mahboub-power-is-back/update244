@@ -31,7 +31,7 @@ exit 0
 fi
 # ==================================================
 # Link Hosting Kalian
-akbarvpn="raw.githubusercontent.com/senowahyu62/scriptvps/main/ipsec"
+akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ipsec"
 
 VPN_IPSEC_PSK='myvpn'
 NET_IFACE=$(ip -o $NET_IFACE -4 route show to default | awk '{print $5}');
