@@ -297,11 +297,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=forking
 ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
+PIDFile=/var/run/stunnel5.pid
 Restart=on-failure
-RestartSec=3
-LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
