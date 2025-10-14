@@ -14,16 +14,16 @@ LIGHT='\033[0;37m'
 MYIP=$(wget -qO- ipinfo.io/ip);
 # ==================================================
 # Link Hosting Kalian
-akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ssh"
+akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/ssh"
 
 # Link Hosting Kalian Untuk Xray
-akbarvpnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/xray"
+akbarvpnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/xray"
 
 # Link Hosting Kalian Untuk Trojan Go
-akbarvpnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/trojango"
+akbarvpnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/trojango"
 
 # Link Hosting Kalian Untuk Stunnel5
-akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/stunnel5"
+akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/stunnel5"
 
 # initializing var
 export DEBIAN_FRONTEND=noninteractive
@@ -393,7 +393,7 @@ netfilter-persistent reload
 cd /usr/bin
 wget -O addhost "https://${akbarvpn}/addhost.sh"
 wget -O about "https://${akbarvpn}/about.sh"
-wget -O menu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/menu.sh"
+wget -O menu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/menu.sh"
 wget -O addssh "https://${akbarvpn}/addssh.sh"
 wget -O trialssh "https://${akbarvpn}/trialssh.sh"
 wget -O delssh "https://${akbarvpn}/delssh.sh"
@@ -436,21 +436,21 @@ wget -O addtrgo "https://${akbarvpnnn}/addtrgo.sh"
 wget -O deltrgo "https://${akbarvpnnn}/deltrgo.sh"
 wget -O renewtrgo "https://${akbarvpnnn}/renewtrgo.sh"
 wget -O cektrgo "https://${akbarvpnnn}/cektrgo.sh"
-wget -O portsshnontls "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/websocket/portsshnontls.sh"
-wget -O portsshws "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/websocket/portsshws.sh"
+wget -O portsshnontls "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshnontls.sh"
+wget -O portsshws "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshws.sh"
 
-wget -O sshovpnmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/sshovpn.sh"
-wget -O l2tpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/l2tpmenu.sh"
-wget -O pptpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/pptpmenu.sh"
-wget -O sstpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/sstpmenu.sh"
-wget -O wgmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/wgmenu.sh"
-wget -O ssmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/ssmenu.sh"
-wget -O ssrmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/ssrmenu.sh"
-wget -O vmessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/vmessmenu.sh"
-wget -O vlessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/vlessmenu.sh"
-wget -O trmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/trmenu.sh"
-wget -O trgomenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/trgomenu.sh"
-wget -O setmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/update/setmenu.sh"
+wget -O sshovpnmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sshovpn.sh"
+wget -O l2tpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/l2tpmenu.sh"
+wget -O pptpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/pptpmenu.sh"
+wget -O sstpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sstpmenu.sh"
+wget -O wgmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/wgmenu.sh"
+wget -O ssmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/ssmenu.sh"
+wget -O ssrmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/ssrmenu.sh"
+wget -O vmessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/vmessmenu.sh"
+wget -O vlessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/vlessmenu.sh"
+wget -O trmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/trmenu.sh"
+wget -O trgomenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/trgomenu.sh"
+wget -O setmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/setmenu.sh"
 
 
 chmod +x portsshnontls
