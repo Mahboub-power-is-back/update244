@@ -298,7 +298,7 @@ Wants=network-online.target
 
 [Service]
 Type=forking
-ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
+ExecStart=/usr/bin/stunnel5 /etc/stunnel5/stunnel5.conf
 PIDFile=/var/run/stunnel5.pid
 Restart=on-failure
 
