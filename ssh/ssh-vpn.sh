@@ -197,10 +197,10 @@ sed -i $MYIP2 /etc/squid/squid.conf
 
 # Install SSLH
 apt -y install sslh
+apt -y install sslh
 rm -f /etc/default/sslh
 
-# Settings SSLH
-cat > /etc/default/sslh <<-END
+cat > /etc/systemd/system/sslh.service << 'EOF'
 [Unit]
 Description=SSL/SSH multiplexer
 After=network.target
@@ -214,8 +214,11 @@ RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
-END
+EOF
 
+systemctl daemon-reload
+systemctl enable sslh
+systemctl restart sslh
 # Restart Service SSLH
 service sslh restart
 systemctl restart sslh
@@ -287,8 +290,7 @@ ls -l /usr/local/bin/stunnel5 /usr/local/bin/stunnel /usr/bin/stunnel4 /usr/bin/
 #cat key.pem cert.pem >> /etc/stunnel5/stunnel5.pem
 
 # Service Stunnel5 systemctl restart stunnel5
-cat > /etc/systemd/system/stunnel5.service << END
-# /etc/systemd/system/stunnel5.service
+cat > /etc/systemd/system/stunnel5.service << 'EOF'
 [Unit]
 Description=Stunnel5 Service
 After=network-online.target
@@ -296,7 +298,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/stunnel4 /etc/stunnel5/stunnel5.conf -f
+ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
 Restart=on-failure
 RestartSec=3
 LimitNOFILE=65536
@@ -304,6 +306,15 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# fallback if stunnel5 binary missing
+if [ ! -x /usr/local/bin/stunnel5 ] && [ -x /usr/local/bin/stunnel ]; then
+  cp /usr/local/bin/stunnel /usr/local/bin/stunnel5
+fi
+
+systemctl daemon-reload
+systemctl enable stunnel5
+systemctl restart stunnel5
 # Service Stunnel5 /etc/init.d/stunnel5
 wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
 
