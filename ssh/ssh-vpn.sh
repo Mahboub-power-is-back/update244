@@ -298,8 +298,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=forking
-ExecStart=/usr/bin/stunnel4 /etc/stunnel5/stunnel5.conf
+Type=simple
+ExecStart=/usr/bin/stunnel5 /etc/stunnel5/stunnel5.conf
 PIDFile=/var/run/stunnel5.pid
 Restart=on-failure
 
