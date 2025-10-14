@@ -294,20 +294,22 @@ ls -l /usr/local/bin/stunnel5 /usr/local/bin/stunnel /usr/bin/stunnel4 /usr/bin/
 
 # Service Stunnel5 systemctl restart stunnel5
 cat > /etc/systemd/system/stunnel5.service << END
+# /etc/systemd/system/stunnel5.service
 [Unit]
 Description=Stunnel5 Service
-Documentation=https://stunnel.org
-Documentation=https://github.com/Akbar218
-After=syslog.target network-online.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
-Type=forking
+Type=simple
+ExecStart=/usr/bin/stunnel4 /etc/stunnel5/stunnel5.conf -f
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-END
-
+EOF
 # Service Stunnel5 /etc/init.d/stunnel5
 wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
 
