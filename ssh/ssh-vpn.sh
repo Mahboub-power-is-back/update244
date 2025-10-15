@@ -265,7 +265,7 @@ connect = 127.0.0.1:109
 
 [openssh]
 accept = 777
-connect = 127.0.0.1:2053
+connect = 127.0.0.1:8880
 
 [openvpn]
 accept = 990
