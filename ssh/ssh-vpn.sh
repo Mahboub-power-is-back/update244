@@ -34,13 +34,13 @@ source /etc/os-release
 ver=$VERSION_ID
 
 #detail nama perusahaan
-country=ID
-state=Indonesia
-locality=Indonesia
-organization=akbarstorevpn
-organizationalunit=akbarstorevpn
-commonname=akbarstorevpn
-email=akbarssh21@gmail.com
+country=TN
+state=Tunisia
+locality=Tunisia
+organization=sslhtunnelmax.com
+organizationalunit=sslhtunnelmax.com
+commonname=sslhtunnelmax.com
+email=vpsplus90@gmail.com
 
 # simple password minimal
 wget -O /etc/pam.d/common-password "https://${akbarvpn}/password"
@@ -85,48 +85,48 @@ echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
 sed -i '$ i\echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6' /etc/rc.local
 
 #update
-apt update -y
-apt upgrade -y
-apt dist-upgrade -y
-apt-get remove --purge ufw firewalld -y
-apt-get remove --purge exim4 -y
+sudo apt update -y
+sudo apt upgrade -y
+sudo apt dist-upgrade -y
+sudo apt-get remove --purge ufw firewalld -y
+sudo apt-get remove --purge exim4 -y
 
 # install wget and curl
-apt -y install wget curl
+sudo apt -y install wget curl
 
 # Install Requirements Tools
-apt install ruby -y
-apt install python -y
-apt install make -y
-apt install cmake -y
-apt install coreutils -y
-apt install rsyslog -y
-apt install net-tools -y
-apt install zip -y
-apt install unzip -y
-apt install nano -y
-apt install sed -y
-apt install gnupg -y
-apt install gnupg1 -y
-apt install bc -y
-apt install jq -y
-apt install apt-transport-https -y
-apt install build-essential -y
-apt install dirmngr -y
-apt install libxml-parser-perl -y
-apt install neofetch -y
-apt install git -y
-apt install lsof -y
-apt install libsqlite3-dev -y
-apt install libz-dev -y
-apt install gcc -y
-apt install g++ -y
-apt install libreadline-dev -y
-apt install zlib1g-dev -y
-apt install libssl-dev -y
-apt install libssl1.0-dev -y
-apt install dos2unix -y
-apt install stunnel4 -y
+sudo apt install ruby -y
+sudo apt install python -y
+sudo apt install make -y
+sudo apt install cmake -y
+sudo apt install coreutils -y
+sudo apt install rsyslog -y
+sudo apt install net-tools -y
+sudo apt install zip -y
+sudo apt install unzip -y
+sudo apt install nano -y
+sudo apt install sed -y
+sudo apt install gnupg -y
+sudo apt install gnupg1 -y
+sudo apt install bc -y
+sudo apt install jq -y
+sudo apt install apt-transport-https -y
+sudo apt install build-essential -y
+sudo apt install dirmngr -y
+sudo apt install libxml-parser-perl -y
+sudo apt install neofetch -y
+sudo apt install git -y
+sudo apt install lsof -y
+sudo apt install libsqlite3-dev -y
+sudo apt install libz-dev -y
+sudo apt install gcc -y
+sudo apt install g++ -y
+sudo apt install libreadline-dev -y
+sudo apt install zlib1g-dev -y
+sudo apt install libssl-dev -y
+sudo apt install libssl1.0-dev -y
+sudo apt install dos2unix -y
+apt install -y libpcre3-dev
 
 # set time GMT +7
 ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
@@ -135,12 +135,12 @@ ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
 sed -i 's/AcceptEnv/#AcceptEnv/g' /etc/ssh/sshd_config
 
 # install
-apt-get --reinstall --fix-missing install -y bzip2 gzip coreutils wget screen rsyslog iftop htop net-tools zip unzip wget net-tools curl nano sed screen gnupg gnupg1 bc apt-transport-https build-essential dirmngr libxml-parser-perl neofetch git lsof
+sudo apt-get --reinstall --fix-missing install -y bzip2 gzip coreutils wget screen rsyslog iftop htop net-tools zip unzip wget net-tools curl nano sed screen gnupg gnupg1 bc apt-transport-https build-essential dirmngr libxml-parser-perl neofetch git lsof
 echo "clear" >> .profile
 echo "neofetch" >> .profile
 
 # install webserver
-apt -y install nginx php php-fpm php-cli php-mysql libxml-parser-perl
+sudo apt -y install nginx php php-fpm php-cli php-mysql libxml-parser-perl
 rm /etc/nginx/sites-enabled/default
 rm /etc/nginx/sites-available/default
 curl https://${akbarvpn}/nginx.conf > /etc/nginx/nginx.conf
@@ -177,60 +177,64 @@ screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
 sed -i 's/Port 22/Port 22/g' /etc/ssh/sshd_config
 
 # install dropbear
-apt -y install dropbear
-sudo tee /etc/default/dropbear > /dev/null <<'EOF'
-# /etc/default/dropbear - minimal safe config
-# Disable default single DROPBEAR_PORT (we use EXTRA_ARGS)
-DROPBEAR_PORT=0
-# Listen on 109 and 143 (add "-p 22" here if you stopped sshd and want 22)
-DROPBEAR_EXTRA_ARGS="-p 109 -p 143"
-# Banner file (leave empty or set path to valid file)
-DROPBEAR_BANNER=""
-DROPBEAR_RECEIVE_WINDOW=65536
-EOF
+sudo apt -y install dropbear
+sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
+sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
+sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 109 -p 143"/g' /etc/default/dropbear
+echo "/bin/false" >> /etc/shells
+echo "/usr/sbin/nologin" >> /etc/shells
 /etc/init.d/dropbear restart
 
 # install squid
 cd
-apt -y install squid
+sudo apt -y install squid3
 wget -O /etc/squid/squid.conf "https://${akbarvpn}/squid3.conf"
 sed -i $MYIP2 /etc/squid/squid.conf
 
 # Install SSLH
 apt -y install sslh
-apt -y install sslh
 rm -f /etc/default/sslh
 
-cat > /etc/systemd/system/sslh.service << 'EOF'
-[Unit]
-Description=SSL/SSH multiplexer
-After=network.target
+# Settings SSLH
+cat > /etc/default/sslh <<-END
+# Default options for sslh initscript
+# sourced by /etc/init.d/sslh
 
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/sbin/sslh --user sslh --listen 0.0.0.0:443 --tls 127.0.0.1:777 --ssh 127.0.0.1:109 --openvpn 127.0.0.1:1194 --http 127.0.0.1:8880 -n -f
-Restart=on-failure
-RestartSec=3
+# Disabled by default, to force yourself
+# to read the configuration:
+# - /usr/share/doc/sslh/README.Debian (quick start)
+# - /usr/share/doc/sslh/README, at "Configuration" section
+# - sslh(8) via "man sslh" for more configuration details.
+# Once configuration ready, you *must* set RUN to yes here
+# and try to start sslh (standalone mode only)
 
-[Install]
-WantedBy=multi-user.target
-EOF
+RUN=yes
 
-systemctl daemon-reload
-systemctl enable sslh
-systemctl restart sslh
+# binary to use: forked (sslh) or single-thread (sslh-select) version
+# systemd users: don't forget to modify /lib/systemd/system/sslh.service
+DAEMON=/usr/sbin/sslh
+
+DAEMON_OPTS="--user sslh --listen 0.0.0.0:443 --tls 127.0.0.1:777 --ssh 127.0.0.1:109 --openvpn 127.0.0.1:1194 --http 127.0.0.1:8880 -n -f
+Restart=on-failure"
+END
+
 # Restart Service SSLH
 service sslh restart
 systemctl restart sslh
 /etc/init.d/sslh restart
 /etc/init.d/sslh status
 /etc/init.d/sslh restart
+service sslh1 restart
+systemctl restart sslh1
+/etc/init.d/sslh1 restart
+/etc/init.d/sslh1 status
+/etc/init.d/sslh1 restart
+
 
 # setting vnstat
 apt -y install vnstat
 /etc/init.d/vnstat restart
-apt -y install libsqlite3-dev
+sudo apt -y install libsqlite3-dev
 wget https://humdi.net/vnstat/vnstat-2.6.tar.gz
 tar zxvf vnstat-2.6.tar.gz
 cd vnstat-2.6
@@ -275,16 +279,14 @@ connect = 127.0.0.1:109
 
 [openssh]
 accept = 777
-connect = 127.0.0.1:443
+connect = 127.0.0.1:2053
 
 [openvpn]
 accept = 990
 connect = 127.0.0.1:1194
 
 END
-sudo systemctl cat stunnel5
-which stunnel5 || which stunnel || which stunnel4 || true
-ls -l /usr/local/bin/stunnel5 /usr/local/bin/stunnel /usr/bin/stunnel4 /usr/bin/stunnel /usr/bin/stunnel5 2>/dev/null || true
+
 # make a certificate
 #openssl genrsa -out key.pem 2048
 #openssl req -new -x509 -key key.pem -out cert.pem -days 1095 \
@@ -292,45 +294,36 @@ ls -l /usr/local/bin/stunnel5 /usr/local/bin/stunnel /usr/bin/stunnel4 /usr/bin/
 #cat key.pem cert.pem >> /etc/stunnel5/stunnel5.pem
 
 # Service Stunnel5 systemctl restart stunnel5
-cat > /etc/systemd/system/stunnel5.service << 'EOF'
+cat > /etc/systemd/system/stunnel5.service << END
 [Unit]
 Description=Stunnel5 Service
-After=network-online.target
+Documentation=https://stunnel.org
+Documentation=https://github.com/Akbar218
+After=syslog.target network-online.target
 
 [Service]
+ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
 Type=forking
-ExecStart=/usr/bin/stunnel5 /etc/stunnel5/stunnel5.conf
-ExecReload=/bin/kill -HUP $MAINPID
-KillMode=mixed
-Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-EOF 
+END
 
-# fallback if stunnel5 binary missing
-if [ ! -x /usr/bin/stunnel5 ] && [ -x /usr/bin/stunnel ]; then
-  cp /usr/bin/stunnel4 /usr/bin/stunnel5
-fi
-
-systemctl daemon-reload
-systemctl enable stunnel5
-systemctl restart stunnel5
 # Service Stunnel5 /etc/init.d/stunnel5
 wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
 
 # Ubah Izin Akses
 chmod 600 /etc/stunnel5/stunnel5.pem
 chmod +x /etc/init.d/stunnel5
-cp /usr/bin/stunnel /usr/bin/stunnel5
+cp /usr/local/bin/stunnel /usr/local/bin/stunnel5
 
 # Remove File
 rm -r -f /usr/local/share/doc/stunnel/
 rm -r -f /usr/local/etc/stunnel/
-rm -f /usr/bin/stunnel
-rm -f /usr/bin/stunnel3
-rm -f /usr/bin/stunnel4
-#rm -f /usr/bin/stunnel5
+rm -f /usr/local/bin/stunnel
+rm -f /usr/local/bin/stunnel3
+rm -f /usr/local/bin/stunnel4
+#rm -f /usr/local/bin/stunnel5
 
 # Restart Stunnel 5
 systemctl stop stunnel5
@@ -345,7 +338,7 @@ systemctl restart stunnel5
 wget https://${akbarvpn}/vpn.sh &&  chmod +x vpn.sh && ./vpn.sh
 
 # install fail2ban
-apt -y install fail2ban
+sudo apt -y install fail2ban
 
 # Instal DDOS Flate
 if [ -d '/usr/local/ddos' ]; then
@@ -530,13 +523,13 @@ echo "0 5 * * * root clearlog && reboot" >> /etc/crontab
 echo "0 0 * * * root xp" >> /etc/crontab
 # remove unnecessary files
 cd
-apt autoclean -y
-apt -y remove --purge unscd
-apt-get -y --purge remove samba*;
-apt-get -y --purge remove apache2*;
-apt-get -y --purge remove bind9*;
-apt-get -y remove sendmail*
-apt autoremove -y
+sudo apt autoclean -y
+sudo apt -y remove --purge unscd
+sudo apt-get -y --purge remove samba*;
+sudo apt-get -y --purge remove apache2*;
+sudo apt-get -y --purge remove bind9*;
+sudo apt-get -y remove sendmail*
+sudo apt autoremove -y
 # finishing
 cd
 chown -R www-data:www-data /home/vps/public_html
