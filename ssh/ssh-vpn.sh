@@ -181,6 +181,9 @@ sudo apt -y install dropbear
 sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
 sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
 sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 109 -p 143"/g' /etc/default/dropbear
+sed -i 's|ExecStart=.*|ExecStart=/usr/sbin/dropbear -EF -p 143 -p 109|g' /usr/lib/systemd/system/dropbear.service
+systemctl daemon-reload
+systemctl restart dropbear
 echo "/bin/false" >> /etc/shells
 echo "/usr/sbin/nologin" >> /etc/shells
 /etc/init.d/dropbear restart
