@@ -261,6 +261,7 @@ chmod 644 /etc/stunnel5
 
 # Download Config Stunnel5
 cat > /etc/stunnel5/stunnel5.conf <<-END
+foreground = no
 cert = /etc/xray/xray.crt
 key = /etc/xray/xray.key
 client = no
@@ -295,17 +296,17 @@ cat > /etc/systemd/system/stunnel5.service << 'EOF'
 [Unit]
 Description=Stunnel5 Service
 After=network-online.target
-Wants=network-online.target
 
 [Service]
-Type=simple
+Type=forking
 ExecStart=/usr/bin/stunnel5 /etc/stunnel5/stunnel5.conf
-PIDFile=/var/run/stunnel5.pid
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF 
 
 # fallback if stunnel5 binary missing
 if [ ! -x /usr/bin/stunnel5 ] && [ -x /usr/bin/stunnel ]; then
