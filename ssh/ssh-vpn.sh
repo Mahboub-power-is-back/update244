@@ -253,19 +253,8 @@ rm -rf /root/vnstat-2.6
 
 # install stunnel 5 
 cd /root/
-wget -q -O stunnel5.zip "https://${akbarvpnnnn}/stunnel5.zip"
-unzip -o stunnel5.zip
-cd /root/stunnel
-chmod +x configure
-./configure
-make
-make install
-cd /root
-rm -r -f stunnel
-rm -f stunnel5.zip
-mkdir -p /etc/stunnel5
-chmod 644 /etc/stunnel5
-
+apt update
+apt install -y stunnel4
 # Download Config Stunnel5
 cat > /etc/stunnel5/stunnel5.conf <<-END
 foreground = no
@@ -305,7 +294,7 @@ Documentation=https://github.com/Akbar218
 After=syslog.target network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/stunnel5 /etc/stunnel5/stunnel5.conf
+ExecStart=/usr/bin/stunnel /etc/stunnel5/stunnel5.conf
 Type=forking
 
 [Install]
