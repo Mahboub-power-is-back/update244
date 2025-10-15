@@ -249,6 +249,7 @@ rm -rf /root/vnstat-2.6
 cd /root/
 apt update
 apt install -y stunnel4
+mkdir -p /etc/stunnel5
 # Download Config Stunnel5
 cat > /etc/stunnel5/stunnel5.conf <<-END
 foreground = no
