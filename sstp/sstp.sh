@@ -34,18 +34,29 @@ NIC=$(ip -o $ANU -4 route show to default | awk '{print $5}');
 source /etc/os-release
 OS=$ID
 ver=$VERSION_ID
+
 if [[ $OS == 'ubuntu' ]]; then
-if [[ "$ver" = "18.04" ]]; then
-yoi=Ubuntu18
-elif [[ "$ver" = "20.04" ]]; then
-yoi=Ubuntu20
-fi
+  if [[ "$ver" = "18.04" ]]; then
+    yoi=Ubuntu18
+  elif [[ "$ver" = "20.04" ]]; then
+    yoi=Ubuntu20
+  elif [[ "$ver" = "22.04" || "$ver" = "24.04" ]]; then
+    # Ubuntu 22 & 24 both compatible with Ubuntu20 accel-ppp packaging
+    yoi=Ubuntu20
+  fi
+
 elif [[ $OS == 'debian' ]]; then
-if [[ "$ver" = "9" ]]; then
-yoi=Debian9
-elif [[ "$ver" = "10" ]]; then
-yoi=Debian10
-fi
+  if [[ "$ver" = "9" ]]; then
+    yoi=Debian9
+  elif [[ "$ver" = "10" ]]; then
+    yoi=Debian10
+  elif [[ "$ver" = "11" ]]; then
+    yoi=Debian10   # works fine
+  elif [[ "$ver" = "12" ]]; then
+    yoi=Debian10   # compatible target
+  elif [[ "$ver" = "13" ]]; then
+    yoi=Debian10   # forward-compatible
+  fi
 fi
 mkdir /home/sstp
 touch /home/sstp/sstp_account
