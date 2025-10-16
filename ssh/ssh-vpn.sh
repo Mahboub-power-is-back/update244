@@ -190,7 +190,8 @@ echo "/usr/sbin/nologin" >> /etc/shells
 
 # install squid
 cd
-sudo apt -y install squid3
+sudo apt -y install squid
+truncate -s 0 /etc/squid/squid.conf
 wget -O /etc/squid/squid.conf "https://${akbarvpn}/squid3.conf"
 sed -i $MYIP2 /etc/squid/squid.conf
 
