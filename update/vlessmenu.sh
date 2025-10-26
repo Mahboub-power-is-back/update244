@@ -1,4 +1,10 @@
-#!/bin/bash                                                          clear                                                                                                                                     # Color definitions                                                  m="\033[0;1;36m"  # Cyan                                             y="\033[0;1;37m"  # White                                            yy="\033[0;1;32m" # Green                                            yl="\033[0;1;33m" # Yellow                                           wh="\033[0m"      # Reset
+#!/bin/bash
+# Color definitions                                                  
+m="\033[0;1;36m"  # Cyan                                             
+y="\033[0;1;37m"  # White                                            
+yy="\033[0;1;32m" # Green                                            
+yl="\033[0;1;33m" # Yellow                                           
+wh="\033[0m"      # Reset
 # Function to display centered text
 center_text() {
     local text="$1"
