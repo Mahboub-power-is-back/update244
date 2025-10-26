@@ -117,9 +117,7 @@ RestartSec=2s
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo systemctl daemon-reload
-sudo systemctl enable udpcustom.service
-sudo systemctl start udpcustom.service
+
 sudo cat > /root/udp/config.json <<'EOF'
 {
   "listen": ":36712",
@@ -130,7 +128,9 @@ sudo cat > /root/udp/config.json <<'EOF'
   }
 }
 EOF
-
+sudo systemctl daemon-reload
+sudo systemctl enable udpcustom.service
+sudo systemctl start udpcustom.service
 history -c
 echo "1.2" > /home/ver
 echo " "
