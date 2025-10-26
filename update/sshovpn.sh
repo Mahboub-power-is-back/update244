@@ -1,4 +1,4 @@
-#!/bin/bash                                                          clear
+#!/bin/bash                                                          
 # Color definitions
 m="\033[0;1;36m"
 y="\033[0;1;37m"
