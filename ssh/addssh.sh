@@ -22,7 +22,7 @@ read -p "Expired (Days): " masaaktif
 IP=$(wget -qO- ipinfo.io/ip);
 ws="$(cat ~/log-install.txt | grep -w "Websocket TLS" | cut -d: -f2|sed 's/ //g')"
 ws2="$(cat ~/log-install.txt | grep -w "Websocket None TLS" | cut -d: -f2|sed 's/ //g')"
-
+udp="$(cat ~/log-install.txt | grep -w "udpcustom" | cut -d: -f2|sed 's/ //g')"
 ssl="$(cat ~/log-install.txt | grep -w "Stunnel5" | cut -d: -f2)"
 sqd="$(cat ~/log-install.txt | grep -w "Squid" | cut -d: -f2)"
 ovpn="$(netstat -nlpt | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)"
@@ -60,7 +60,7 @@ echo -e "Port SSL      : 990"
 echo -e "OVPN TCP      : http://$IP:89/tcp.ovpn"
 echo -e "OVPN UDP      : http://$IP:89/udp.ovpn"
 echo -e "OVPN SSL      : http://$IP:89/ssl.ovpn"
-echo -e "udpcustom     : ${domain}:1-65535@$Login:$Pass"
+echo -e "udpcustom     : ${domain}:$udp@$Login:$Pass"
 echo -e "BadVpn        : 7100-7200-7300"
 echo -e "Created       : $hariini"
 echo -e "Expired       : $expi"
