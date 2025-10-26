@@ -98,44 +98,11 @@ systemctl daemon-reload
 systemctl enable autosett
 wget -O /etc/set.sh "https://${akbarvpn}/set.sh"
 chmod +x /etc/set.sh
-mkdir -p /root/udp
-cd /root/udp
-wget https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/udp-custom-linux-amd64
-chmod +x /root/udp/udp-custom-linux-amd64
-sudo cat > /etc/systemd/system/udpcustom.service <<'EOF'
-[Unit]
-Description=UDP Custom by ePro Dev. Team
-After=network.target
-
-[Service]
-User=root
-Type=simple
-ExecStart=/root/udp/udp-custom-linux-amd64 server
-WorkingDirectory=/root/udp/
-Restart=always
-RestartSec=2s
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo cat > /root/udp/config.json <<'EOF'
-{
-  "listen": ":36712",
-  "stream_buffer": 33554432,
-  "receive_buffer": 83886080,
-  "auth": {
-    "mode": "passwords"
-  }
-}
-EOF
-sudo systemctl daemon-reload
-sudo systemctl enable udpcustom.service
-sudo systemctl start udpcustom.service
 history -c
 echo "1.2" > /home/ver
 echo " "
-echo "Installation has been completed!!"echo " "
+echo "Installation has been completed!!"
+echo " "
 echo "============================================================================" | tee -a log-install.txt
 echo "" | tee -a log-install.txt
 echo "----------------------------------------------------------------------------" | tee -a log-install.txt
