@@ -101,6 +101,7 @@ chmod +x /etc/set.sh
 mkdir -p /root/udp
 cd /root/udp
 wget https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/udp-custom-linux-amd64
+chmod +x /root/udp/udp-custom-linux-amd64
 sudo cat > /etc/systemd/system/udpcustom.service <<'EOF'
 [Unit]
 Description=UDP Custom by ePro Dev. Team
