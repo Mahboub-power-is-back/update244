@@ -1,5 +1,4 @@
 #!/bin/bash
-clear
 # Color definitions
 m="\033[0;1;36m"  # Cyan
 y="\033[0;1;37m"  # White
