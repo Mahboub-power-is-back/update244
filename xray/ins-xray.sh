@@ -1,545 +1,663 @@
 #!/bin/bash
 
 # ============================================================
-# Akbar Xray Installer
-# Debian / Ubuntu
-# VMess + VLESS + Trojan WS/TLS
-# Trojan-Go WS
+# AKBAR VPN - XRAY INSTALLER
+# Modern Xray Installer
+# Ubuntu / Debian
+#
+# PUBLIC:
+#   80   -> Nginx HTTP
+#   8443 -> Nginx HTTPS
+#
+# INTERNAL:
+#   10001 VMess WS TLS
+#   10002 VLESS WS TLS
+#   10003 Trojan WS TLS
+#   10004 VMess WS HTTP
+#   10005 VLESS WS HTTP
+#   10006 VLESS gRPC TLS
+#   10007 Trojan gRPC TLS
+#   10008 VLESS XHTTP TLS
+#   10009 VLESS XHTTP HTTP
+#
+# REALITY:
+#   10443 VLESS Reality
+#
 # ============================================================
 
-set -Eeuo pipefail
-
-# ============================================================
-# Colors
-# ============================================================
+set -o pipefail
 
 RED='\033[0;31m'
-NC='\033[0m'
 GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+LOG_FILE="/root/xray-install.log"
+INFO_FILE="/root/xray-install-info.txt"
+
+mkdir -p /var/log
+
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 
 # ============================================================
-# Error Handler
+# UI
 # ============================================================
 
-trap 'echo -e "${RED}[ERROR]${NC} Line $LINENO: $BASH_COMMAND"; exit 1' ERR
+banner() {
+    clear
+    echo -e "${CYAN}"
+    echo "============================================================"
+    echo "                 AKBAR VPN XRAY INSTALLER"
+    echo "============================================================"
+    echo -e "${NC}"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+ok() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+die() {
+    error "$1"
+    echo
+    echo "Installation stopped."
+    echo "Full log:"
+    echo "$LOG_FILE"
+    exit 1
+}
+
+run() {
+    "$@"
+    local rc=$?
+
+    if [ $rc -ne 0 ]; then
+        error "Command failed: $*"
+        return $rc
+    fi
+
+    return 0
+}
 
 # ============================================================
-# Root Check
+# ROOT
 # ============================================================
 
 if [ "${EUID}" -ne 0 ]; then
-    echo -e "${RED}You need to run this script as root.${NC}"
-    exit 1
+    die "Run this installer as root."
+fi
+
+banner
+
+# ============================================================
+# VIRTUALIZATION
+# ============================================================
+
+if command -v systemd-detect-virt >/dev/null 2>&1; then
+    VIRT=$(systemd-detect-virt 2>/dev/null || true)
+
+    if [ "$VIRT" = "openvz" ]; then
+        die "OpenVZ is not supported."
+    fi
 fi
 
 # ============================================================
-# OS Detection
+# OS DETECTION
 # ============================================================
 
-if [ ! -f /etc/os-release ]; then
-    echo -e "${RED}Cannot detect operating system.${NC}"
-    exit 1
+info "Detecting operating system..."
+
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+else
+    die "Cannot detect operating system."
 fi
 
-. /etc/os-release
+OS_ID="${ID}"
+OS_VERSION="${VERSION_ID}"
 
-case "${ID}" in
-    debian|ubuntu)
+echo "OS       : $OS_ID"
+echo "Version  : $OS_VERSION"
+echo
+
+case "$OS_ID" in
+    ubuntu|debian)
+        ok "Supported OS detected."
         ;;
     *)
-        echo -e "${RED}Supported OS: Debian / Ubuntu${NC}"
-        echo -e "${ORANGE}Detected: ${ID}${NC}"
-        exit 1
+        die "This installer supports Ubuntu and Debian."
         ;;
 esac
 
-echo -e "${CYAN}OS:${NC} ${PRETTY_NAME}"
-
 # ============================================================
-# Virtualization Check
+# PACKAGE MANAGER LOCK FIX
 # ============================================================
 
-VIRT="$(systemd-detect-virt 2>/dev/null || true)"
+wait_for_apt() {
 
-if [ "$VIRT" = "openvz" ]; then
-    echo -e "${RED}OpenVZ is not supported.${NC}"
-    exit 1
-fi
+    info "Checking package manager..."
 
-# ============================================================
-# Variables
-# ============================================================
+    local timeout=600
+    local elapsed=0
 
-MYIP="$(curl -4 -fsS --max-time 10 https://ipinfo.io/ip 2>/dev/null || true)"
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+       || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+       || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
 
-if [ -z "$MYIP" ]; then
-    MYIP="$(wget -qO- --timeout=10 https://ipinfo.io/ip 2>/dev/null || true)"
-fi
+        if [ $elapsed -ge $timeout ]; then
+            error "Package manager is still locked after ${timeout}s."
+            return 1
+        fi
 
-if [ ! -f /etc/xray/domain ]; then
-    echo -e "${RED}/etc/xray/domain not found.${NC}"
-    echo -e "${ORANGE}Make sure your domain installation runs before ins-xray.sh.${NC}"
-    exit 1
-fi
+        echo -ne "\r${YELLOW}Waiting for apt/dpkg lock... ${elapsed}s${NC}"
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
 
-domain="$(tr -d '[:space:]' < /etc/xray/domain)"
+    echo
+    ok "Package manager ready."
+}
 
-if [ -z "$domain" ]; then
-    echo -e "${RED}Domain is empty.${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}Domain:${NC} $domain"
-echo -e "${GREEN}IP:${NC} ${MYIP:-unknown}"
+wait_for_apt || die "Could not obtain apt/dpkg lock."
 
 # ============================================================
-# Package Helpers
+# REPAIR DPKG
 # ============================================================
+
+info "Repairing package database..."
+
+dpkg --configure -a || true
+apt-get -f install -y || true
+
+wait_for_apt || die "Package manager lock unavailable."
+
+# ============================================================
+# BASIC PACKAGES
+# ============================================================
+
+info "Installing dependencies..."
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt_fix() {
-    dpkg --configure -a >/dev/null 2>&1 || true
-    apt-get -f install -y >/dev/null 2>&1 || true
-}
+apt-get update -y || die "apt update failed."
 
-apt_install() {
-    apt_fix
-    apt-get update -y
-    apt-get install -y "$@"
-}
+PACKAGES="
+curl
+wget
+ca-certificates
+unzip
+jq
+openssl
+uuid-runtime
+socat
+lsof
+net-tools
+iproute2
+iptables
+iptables-persistent
+cron
+bash-completion
+gnupg
+"
 
-# ============================================================
-# Base Dependencies
-# ============================================================
-
-echo -e "${CYAN}[1/10] Installing dependencies...${NC}"
-
-apt_install \
-    ca-certificates \
-    curl \
-    wget \
-    unzip \
-    zip \
-    xz-utils \
-    socat \
-    cron \
-    bash-completion \
-    dnsutils \
-    lsb-release \
-    gnupg \
-    gnupg2 \
-    gnupg1 \
-    apt-transport-https \
-    iptables \
-    iptables-persistent \
-    netfilter-persistent \
-    openssl \
-    lsof \
-    nginx \
-    jq \
-    procps \
-    systemd
+apt-get install -y $PACKAGES || die "Failed to install basic dependencies."
 
 # ============================================================
-# Time
+# TIME
 # ============================================================
 
-echo -e "${CYAN}[2/10] Configuring time synchronization...${NC}"
+info "Configuring system time..."
 
-if command -v timedatectl >/dev/null 2>&1; then
-    timedatectl set-timezone Asia/Jakarta || true
+apt-get install -y chrony || warn "Chrony installation failed."
+
+systemctl enable chrony 2>/dev/null || true
+systemctl restart chrony 2>/dev/null || true
+
+timedatectl set-ntp true 2>/dev/null || true
+
+# Preserve your existing timezone
+timedatectl set-timezone Asia/Jakarta 2>/dev/null || true
+
+# ntpdate is obsolete on newer Ubuntu/Debian.
+# Do NOT install ntpdate.
+ok "Time synchronization configured."
+
+# ============================================================
+# DOMAIN
+# ============================================================
+
+if [ ! -f /etc/xray/domain ]; then
+
+    if [ -f /root/domain ]; then
+        mkdir -p /etc/xray
+        cp /root/domain /etc/xray/domain
+    fi
 fi
 
-apt_install chrony
-
-systemctl enable chrony >/dev/null 2>&1 || true
-systemctl restart chrony >/dev/null 2>&1 || true
-
-if command -v timedatectl >/dev/null 2>&1; then
-    timedatectl set-ntp true || true
+if [ ! -f /etc/xray/domain ]; then
+    echo
+    read -rp "Enter your domain: " DOMAIN
+    echo "$DOMAIN" > /etc/xray/domain
+else
+    DOMAIN=$(cat /etc/xray/domain | head -n1 | tr -d '[:space:]')
 fi
 
-chronyc tracking >/dev/null 2>&1 || true
+[ -n "$DOMAIN" ] || die "Domain is empty."
 
-date
+ok "Domain: $DOMAIN"
 
 # ============================================================
-# Directories
+# PUBLIC IP
 # ============================================================
 
-echo -e "${CYAN}[3/10] Preparing directories...${NC}"
+info "Detecting public IP..."
 
-mkdir -p /usr/bin/xray
+MYIP=$(curl -4 -fsSL --max-time 10 https://api.ipify.org 2>/dev/null || true)
+
+if [ -z "$MYIP" ]; then
+    MYIP=$(curl -4 -fsSL --max-time 10 https://ifconfig.me 2>/dev/null || true)
+fi
+
+echo "Public IP : $MYIP"
+
+# ============================================================
+# DIRECTORIES
+# ============================================================
+
 mkdir -p /etc/xray
 mkdir -p /var/log/xray
-mkdir -p /etc/trojan-go
-mkdir -p /var/log/trojan-go
-
-touch /var/log/xray/access.log
-touch /var/log/xray/error.log
-touch /var/log/trojan-go/trojan-go.log
+mkdir -p /var/lib/akbarstorevpn
 
 chmod 755 /etc/xray
-chmod 755 /var/log/xray
 
 # ============================================================
-# Download Helper
+# DOWNLOAD LATEST XRAY
 # ============================================================
 
-download_file() {
-    local url="$1"
-    local output="$2"
+info "Downloading latest Xray release..."
 
-    echo -e "${BLUE}Downloading:${NC} $url"
+XRAY_API="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
 
-    for attempt in 1 2 3 4 5; do
-        if curl -fL --retry 3 --connect-timeout 15 --max-time 300 \
-            "$url" -o "$output"; then
-            return 0
-        fi
+XRAY_TAG=$(curl -fsSL "$XRAY_API" \
+    | jq -r '.tag_name' 2>/dev/null || true)
 
-        echo -e "${ORANGE}Download failed. Retry ${attempt}/5...${NC}"
-        sleep 2
-    done
-
-    echo -e "${RED}Download failed:${NC} $url"
-    return 1
-}
-
-# ============================================================
-# Latest Xray Version
-# ============================================================
-
-echo -e "${CYAN}[4/10] Installing latest Xray Core...${NC}"
-
-latest_version="$(
-    curl -fsSL \
-    --retry 5 \
-    --connect-timeout 15 \
-    https://api.github.com/repos/XTLS/Xray-core/releases/latest |
-    jq -r '.tag_name' |
-    sed 's/^v//'
-)"
-
-if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
-    echo -e "${RED}Unable to determine Xray version.${NC}"
-    exit 1
+if [ -z "$XRAY_TAG" ] || [ "$XRAY_TAG" = "null" ]; then
+    die "Unable to determine latest Xray version."
 fi
 
-echo -e "${GREEN}Xray version:${NC} v${latest_version}"
+XRAY_VERSION="${XRAY_TAG#v}"
 
-xraycore_link="https://github.com/XTLS/Xray-core/releases/download/v${latest_version}/Xray-linux-64.zip"
+echo "Xray version : $XRAY_VERSION"
 
-tmpdir="$(mktemp -d)"
-trap 'rm -rf "$tmpdir"' EXIT
+ARCH=$(uname -m)
 
-download_file "$xraycore_link" "$tmpdir/xray.zip"
+case "$ARCH" in
+    x86_64|amd64)
+        XRAY_ARCH="64"
+        ;;
+    aarch64|arm64)
+        XRAY_ARCH="arm64-v8a"
+        ;;
+    armv7l)
+        XRAY_ARCH="arm32-v7a"
+        ;;
+    *)
+        die "Unsupported architecture: $ARCH"
+        ;;
+esac
 
-unzip -qo "$tmpdir/xray.zip" -d "$tmpdir/xray"
+XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_TAG}/Xray-linux-${XRAY_ARCH}.zip"
 
-if [ ! -f "$tmpdir/xray/xray" ]; then
-    echo -e "${RED}Xray binary was not found after extraction.${NC}"
-    exit 1
+TMP_DIR=$(mktemp -d)
+
+curl -fL "$XRAY_URL" -o "$TMP_DIR/xray.zip" \
+    || die "Failed to download Xray."
+
+unzip -oq "$TMP_DIR/xray.zip" -d "$TMP_DIR/xray" \
+    || die "Failed to extract Xray."
+
+if [ ! -f "$TMP_DIR/xray/xray" ]; then
+    die "Xray binary was not found after extraction."
 fi
 
-install -m 0755 "$tmpdir/xray/xray" /usr/local/bin/xray
+install -m 0755 "$TMP_DIR/xray/xray" /usr/local/bin/xray
 
-# Compatibility path
-ln -sf /usr/local/bin/xray /usr/bin/xray
+rm -rf "$TMP_DIR"
 
-/usr/local/bin/xray version
+ok "Xray installed."
 
-# ============================================================
-# Stop Existing Services
-# ============================================================
-
-echo -e "${CYAN}[5/10] Preparing ports and existing services...${NC}"
-
-systemctl stop xray.service 2>/dev/null || true
-systemctl stop trojan-go.service 2>/dev/null || true
-systemctl stop nginx.service 2>/dev/null || true
-
-# Stop services currently listening on 80/8443 if required
-for port in 80 8443; do
-    if command -v lsof >/dev/null 2>&1; then
-        lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null |
-            xargs -r kill 2>/dev/null || true
-    fi
-done
+/usr/local/bin/xray version || die "Xray binary does not work."
 
 # ============================================================
-# ACME
+# UUIDS
 # ============================================================
 
-echo -e "${CYAN}[6/10] Installing / renewing certificate...${NC}"
+info "Generating UUIDs..."
 
-cd /root
+UUID_VMESS_TLS=$(uuidgen)
+UUID_VLESS_TLS=$(uuidgen)
+UUID_TROJAN=$(uuidgen)
+UUID_VMESS_HTTP=$(uuidgen)
+UUID_VLESS_HTTP=$(uuidgen)
+UUID_VLESS_GRPC=$(uuidgen)
+UUID_TROJAN_GRPC=$(uuidgen)
+UUID_VLESS_XHTTP=$(uuidgen)
+UUID_VLESS_XHTTP_HTTP=$(uuidgen)
+UUID_REALITY=$(uuidgen)
 
-if [ ! -f /root/.acme.sh/acme.sh ]; then
-    download_file \
-        "https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh" \
-        "/root/acme.sh"
+# ============================================================
+# REALITY KEYS
+# ============================================================
 
-    chmod +x /root/acme.sh
+info "Generating Reality key pair..."
 
-    bash /root/acme.sh --install \
-        --home /root/.acme.sh \
-        --accountemail senowahyu62@gmail.com
+REALITY_KEYS=$(/usr/local/bin/xray x25519 2>/dev/null || true)
 
-    rm -f /root/acme.sh
+PRIVATE_KEY=$(echo "$REALITY_KEYS" \
+    | awk -F': ' '/Private key/ {print $2; exit}')
+
+PUBLIC_KEY=$(echo "$REALITY_KEYS" \
+    | awk -F': ' '/Password/ {print $2; exit}')
+
+if [ -z "$PRIVATE_KEY" ]; then
+    PRIVATE_KEY=$(echo "$REALITY_KEYS" \
+        | awk -F': ' '/PrivateKey/ {print $2; exit}')
 fi
 
-/root/.acme.sh/acme.sh \
-    --register-account \
-    -m senowahyu62@gmail.com \
-    >/dev/null 2>&1 || true
-
-/root/.acme.sh/acme.sh \
-    --issue \
-    --standalone \
-    -d "$domain" \
-    --force
-
-/root/.acme.sh/acme.sh \
-    --install-cert \
-    -d "$domain" \
-    --fullchain-file /etc/xray/xray.crt \
-    --key-file /etc/xray/xray.key \
-    --reloadcmd "systemctl reload nginx >/dev/null 2>&1 || true"
-
-if [ ! -s /etc/xray/xray.crt ] || [ ! -s /etc/xray/xray.key ]; then
-    echo -e "${RED}Certificate installation failed.${NC}"
-    exit 1
+if [ -z "$PUBLIC_KEY" ]; then
+    PUBLIC_KEY=$(echo "$REALITY_KEYS" \
+        | awk -F': ' '/PublicKey/ {print $2; exit}')
 fi
 
-chmod 644 /etc/xray/xray.crt
-chmod 600 /etc/xray/xray.key
+if [ -z "$PRIVATE_KEY" ]; then
+    warn "Could not automatically parse Reality key output."
+    warn "Reality configuration will be generated after manual key detection."
+fi
 
 # ============================================================
-# UUID
+# REALITY DESTINATION
 # ============================================================
 
-uuid1="$(cat /proc/sys/kernel/random/uuid)"
-uuid2="$(cat /proc/sys/kernel/random/uuid)"
-uuid3="$(cat /proc/sys/kernel/random/uuid)"
-uuid4="$(cat /proc/sys/kernel/random/uuid)"
-uuid5="$(cat /proc/sys/kernel/random/uuid)"
-uuid6="$(cat /proc/sys/kernel/random/uuid)"
-
-path_crt="/etc/xray/xray.crt"
-path_key="/etc/xray/xray.key"
+REALITY_DEST="www.cloudflare.com:443"
+REALITY_SERVER_NAME="www.cloudflare.com"
 
 # ============================================================
-# Internal Xray Ports
-#
-# Public:
-#   80   -> Nginx
-#   8443 -> Nginx
-#
-# Internal:
-#   VMess TLS       10001
-#   VLESS TLS       10002
-#   Trojan TLS      10003
-#   VMess non-TLS   10004
-#   VLESS non-TLS   10005
+# XRAY CONFIG
 # ============================================================
 
-VMESS_TLS_PORT=10001
-VLESS_TLS_PORT=10002
-TROJAN_TLS_PORT=10003
+info "Creating Xray configuration..."
 
-VMESS_HTTP_PORT=10004
-VLESS_HTTP_PORT=10005
-
-# ============================================================
-# Xray Config
-# ============================================================
-
-echo -e "${CYAN}[7/10] Creating Xray configuration...${NC}"
-
-cat > /etc/xray/config.json << END
+cat > /etc/xray/config.json <<EOF
 {
   "log": {
     "access": "/var/log/xray/access.log",
     "error": "/var/log/xray/error.log",
-    "loglevel": "info"
+    "loglevel": "warning"
   },
 
   "inbounds": [
 
     {
-      "port": ${VMESS_TLS_PORT},
       "listen": "127.0.0.1",
+      "port": 10001,
       "protocol": "vmess",
-
       "settings": {
         "clients": [
           {
-            "id": "${uuid1}",
+            "id": "$UUID_VMESS_TLS",
             "alterId": 0
           }
         ]
       },
-
       "streamSettings": {
         "network": "ws",
         "security": "none",
-
         "wsSettings": {
-          "path": "/vmess/",
-          "headers": {
-            "Host": ""
-          }
+          "path": "/vmess/"
         }
       }
     },
 
     {
-      "port": ${VMESS_HTTP_PORT},
       "listen": "127.0.0.1",
-      "protocol": "vmess",
-
-      "settings": {
-        "clients": [
-          {
-            "id": "${uuid2}",
-            "alterId": 0
-          }
-        ]
-      },
-
-      "streamSettings": {
-        "network": "ws",
-        "security": "none",
-
-        "wsSettings": {
-          "path": "/vmess/",
-          "headers": {
-            "Host": ""
-          }
-        }
-      },
-
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
-      }
-    },
-
-    {
-      "port": ${VLESS_TLS_PORT},
-      "listen": "127.0.0.1",
+      "port": 10002,
       "protocol": "vless",
-
       "settings": {
         "clients": [
           {
-            "id": "${uuid3}"
+            "id": "$UUID_VLESS_TLS"
           }
         ],
         "decryption": "none"
       },
-
       "streamSettings": {
         "network": "ws",
         "security": "none",
-
         "wsSettings": {
-          "path": "/vless/",
-          "headers": {
-            "Host": ""
-          }
+          "path": "/vless/"
         }
-      },
-
-      "domain": "${domain}",
-
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
       }
     },
 
     {
-      "port": ${VLESS_HTTP_PORT},
       "listen": "127.0.0.1",
-      "protocol": "vless",
-
-      "settings": {
-        "clients": [
-          {
-            "id": "${uuid4}"
-          }
-        ],
-        "decryption": "none"
-      },
-
-      "streamSettings": {
-        "network": "ws",
-        "security": "none",
-
-        "wsSettings": {
-          "path": "/vless/",
-          "headers": {
-            "Host": ""
-          }
-        }
-      },
-
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
-        ]
-      }
-    },
-
-    {
-      "port": ${TROJAN_TLS_PORT},
-      "listen": "127.0.0.1",
+      "port": 10003,
       "protocol": "trojan",
-
       "settings": {
         "clients": [
           {
-            "password": "${uuid5}"
+            "password": "$UUID_TROJAN"
           }
         ]
       },
-
       "streamSettings": {
         "network": "ws",
         "security": "none",
-
         "wsSettings": {
-          "path": "/trojan/",
-          "headers": {
-            "Host": "${domain}"
-          }
+          "path": "/trojan/"
         }
-      },
+      }
+    },
 
-      "domain": "${domain}",
-
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls"
+    {
+      "listen": "127.0.0.1",
+      "port": 10004,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_VMESS_HTTP",
+            "alterId": 0
+          }
         ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {
+          "path": "/vmess/"
+        }
+      }
+    },
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10005,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_VLESS_HTTP"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {
+          "path": "/vless/"
+        }
+      }
+    },
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10006,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_VLESS_GRPC"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "none",
+        "grpcSettings": {
+          "serviceName": "vless-grpc"
+        }
+      }
+    },
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10007,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "$UUID_TROJAN_GRPC"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "none",
+        "grpcSettings": {
+          "serviceName": "trojan-grpc"
+        }
+      }
+    },
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10008,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_VLESS_XHTTP"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {
+          "path": "/xhttp/"
+        }
+      }
+    },
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10009,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_VLESS_XHTTP_HTTP"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {
+          "path": "/xhttp/"
+        }
+      }
+    },
+
+EOF
+
+# ============================================================
+# REALITY
+# ============================================================
+
+if [ -n "$PRIVATE_KEY" ]; then
+
+cat >> /etc/xray/config.json <<EOF
+
+    {
+      "listen": "0.0.0.0",
+      "port": 10443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID_REALITY",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "$REALITY_DEST",
+          "xver": 0,
+          "serverNames": [
+            "$REALITY_SERVER_NAME"
+          ],
+          "privateKey": "$PRIVATE_KEY",
+          "shortIds": [
+            "0123456789abcdef"
+          ]
+        }
+      }
+    },
+
+EOF
+
+fi
+
+# ============================================================
+# CLOSE CONFIG
+# ============================================================
+
+cat >> /etc/xray/config.json <<EOF
+
+    {
+      "listen": "127.0.0.1",
+      "port": 10010,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1",
+        "port": 89,
+        "network": "tcp"
       }
     }
 
@@ -548,685 +666,525 @@ cat > /etc/xray/config.json << END
   "outbounds": [
     {
       "protocol": "freedom",
-      "settings": {}
+      "tag": "direct"
     },
-
     {
       "protocol": "blackhole",
-      "settings": {},
       "tag": "blocked"
     }
   ],
 
   "routing": {
+    "domainStrategy": "AsIs",
     "rules": [
       {
         "type": "field",
-        "ip": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
-        ],
-        "outboundTag": "blocked"
-      },
-
-      {
-        "inboundTag": [
-          "api"
-        ],
-        "outboundTag": "api",
-        "type": "field"
-      },
-
-      {
-        "type": "field",
-        "outboundTag": "blocked",
         "protocol": [
           "bittorrent"
-        ]
+        ],
+        "outboundTag": "blocked"
       }
     ]
   },
 
   "stats": {},
 
-  "api": {
-    "services": [
-      "StatsService"
-    ],
-    "tag": "api"
-  },
-
   "policy": {
     "levels": {
       "0": {
-        "statsUserDownlink": true,
-        "statsUserUplink": true
+        "statsUserUplink": true,
+        "statsUserDownlink": true
       }
     },
-
     "system": {
       "statsInboundUplink": true,
       "statsInboundDownlink": true
     }
   }
 }
-END
+EOF
+
+chmod 600 /etc/xray/config.json
 
 # ============================================================
-# Validate Xray
+# CONFIG TEST
 # ============================================================
 
-echo -e "${CYAN}Validating Xray configuration...${NC}"
+info "Testing Xray configuration..."
 
-if ! /usr/local/bin/xray run \
-    -test \
-    -config /etc/xray/config.json; then
-
-    echo -e "${RED}Xray configuration validation failed.${NC}"
-    exit 1
+if /usr/local/bin/xray run -test -config /etc/xray/config.json; then
+    ok "Xray configuration is valid."
+else
+    die "Xray configuration test failed."
 fi
 
-echo -e "${GREEN}Xray configuration OK.${NC}"
-
 # ============================================================
-# Xray Service
+# NGINX
 # ============================================================
 
-cat > /etc/systemd/system/xray.service << END
+info "Installing Nginx..."
+
+wait_for_apt || die "Package manager unavailable."
+
+apt-get install -y nginx || die "Nginx installation failed."
+
+systemctl stop nginx 2>/dev/null || true
+
+# ============================================================
+# NGINX CONFIG
+# ============================================================
+
+info "Creating Nginx reverse proxy..."
+
+mkdir -p /var/www/html
+
+cat > /var/www/html/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>$DOMAIN</title>
+</head>
+<body>
+<h1>Welcome</h1>
+</body>
+</html>
+EOF
+
+rm -f /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/sites-available/xray.conf <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name $DOMAIN;
+
+    root /var/www/html;
+    index index.html;
+
+    location /vmess/ {
+        proxy_pass http://127.0.0.1:10001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /vless/ {
+        proxy_pass http://127.0.0.1:10002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /trojan/ {
+        proxy_pass http://127.0.0.1:10003;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /grpc/ {
+        grpc_pass grpc://127.0.0.1:10006;
+    }
+
+    location /trojan-grpc/ {
+        grpc_pass grpc://127.0.0.1:10007;
+    }
+
+    location /xhttp/ {
+        proxy_pass http://127.0.0.1:10008;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_buffering off;
+    }
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/xray.conf /etc/nginx/sites-enabled/xray.conf
+
+# ============================================================
+# CERTIFICATE
+# ============================================================
+
+info "Checking TLS certificate..."
+
+mkdir -p /etc/xray
+
+if [ -f /etc/xray/xray.crt ] && [ -f /etc/xray/xray.key ]; then
+    ok "Existing Xray certificate found."
+else
+
+    info "Installing ACME..."
+
+    curl -fsSL https://get.acme.sh | sh -s email=admin@"$DOMAIN" \
+        || warn "ACME installation failed."
+
+    export PATH="/root/.acme.sh:$PATH"
+
+    if command -v acme.sh >/dev/null 2>&1; then
+
+        systemctl stop nginx 2>/dev/null || true
+
+        acme.sh --issue \
+            --standalone \
+            -d "$DOMAIN" \
+            --force \
+            || warn "Certificate issuance failed."
+
+        if [ -f "/root/.acme.sh/$DOMAIN/fullchain.cer" ]; then
+
+            acme.sh --install-cert \
+                -d "$DOMAIN" \
+                --fullchain-file /etc/xray/xray.crt \
+                --key-file /etc/xray/xray.key \
+                --reloadcmd "systemctl restart nginx xray" \
+                || warn "Certificate installation failed."
+
+        fi
+    fi
+fi
+
+if [ ! -f /etc/xray/xray.crt ] || [ ! -f /etc/xray/xray.key ]; then
+    warn "TLS certificate is not available."
+    warn "HTTPS services will not work until the certificate is installed."
+fi
+
+# ============================================================
+# NGINX HTTPS
+# ============================================================
+
+if [ -f /etc/xray/xray.crt ] && [ -f /etc/xray/xray.key ]; then
+
+cat >> /etc/nginx/sites-available/xray.conf <<EOF
+
+server {
+    listen 8443 ssl http2;
+    listen [::]:8443 ssl http2;
+
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/xray/xray.crt;
+    ssl_certificate_key /etc/xray/xray.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /var/www/html;
+    index index.html;
+
+    location /vmess/ {
+        proxy_pass http://127.0.0.1:10001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /vless/ {
+        proxy_pass http://127.0.0.1:10002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /trojan/ {
+        proxy_pass http://127.0.0.1:10003;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    location /grpc/ {
+        grpc_pass grpc://127.0.0.1:10006;
+    }
+
+    location /trojan-grpc/ {
+        grpc_pass grpc://127.0.0.1:10007;
+    }
+
+    location /xhttp/ {
+        proxy_pass http://127.0.0.1:10008;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_buffering off;
+    }
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+
+fi
+
+# ============================================================
+# NGINX TEST
+# ============================================================
+
+nginx -t || die "Nginx configuration test failed."
+
+systemctl enable nginx
+systemctl restart nginx || warn "Nginx failed to start."
+
+# ============================================================
+# XRAY SERVICE
+# ============================================================
+
+cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service By Akbar Maulana
 Documentation=https://t.me/Akbar218
-After=network.target nss-lookup.target
+After=network-online.target nginx.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
 
 ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 
 Restart=on-failure
 RestartSec=3
-RestartPreventExitStatus=23
 
 LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
-END
-
-# ============================================================
-# Nginx WS Multiplexer
-# ============================================================
-
-echo -e "${CYAN}Creating WS multiplexer...${NC}"
-
-rm -f /etc/nginx/sites-enabled/default
-rm -f /etc/nginx/sites-available/default
-
-cat > /etc/nginx/sites-available/xray-ws << END
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    '' close;
-}
-
-server {
-    listen 80;
-    listen [::]:80;
-
-    server_name ${domain};
-
-    location /vmess/ {
-        proxy_redirect off;
-        proxy_pass http://127.0.0.1:${VMESS_HTTP_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 86400;
-    }
-
-    location /vless/ {
-        proxy_redirect off;
-        proxy_pass http://127.0.0.1:${VLESS_HTTP_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 86400;
-    }
-
-    location / {
-        return 404;
-    }
-}
-
-server {
-    listen 8443 ssl;
-    listen [::]:8443 ssl;
-
-    server_name ${domain};
-
-    ssl_certificate ${path_crt};
-    ssl_certificate_key ${path_key};
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    location /vmess/ {
-        proxy_redirect off;
-        proxy_pass http://127.0.0.1:${VMESS_TLS_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 86400;
-    }
-
-    location /vless/ {
-        proxy_redirect off;
-        proxy_pass http://127.0.0.1:${VLESS_TLS_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 86400;
-    }
-
-    location /trojan/ {
-        proxy_redirect off;
-        proxy_pass http://127.0.0.1:${TROJAN_TLS_PORT};
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 86400;
-    }
-
-    location / {
-        return 404;
-    }
-}
-END
-
-ln -sf /etc/nginx/sites-available/xray-ws \
-    /etc/nginx/sites-enabled/xray-ws
-
-nginx -t
-
-# ============================================================
-# Trojan-Go
-# ============================================================
-
-echo -e "${CYAN}[8/10] Installing Trojan-Go...${NC}"
-
-latest_trojango_version="$(
-    curl -fsSL \
-    --retry 5 \
-    --connect-timeout 15 \
-    "https://api.github.com/repos/p4gefau1t/trojan-go/releases/latest" |
-    jq -r '.tag_name'
-)"
-
-if [ -z "$latest_trojango_version" ] ||
-   [ "$latest_trojango_version" = "null" ]; then
-
-    echo -e "${RED}Unable to determine Trojan-Go version.${NC}"
-    exit 1
-fi
-
-trojango_link="https://github.com/p4gefau1t/trojan-go/releases/download/${latest_trojango_version}/trojan-go-linux-amd64.zip"
-
-trojandir="$(mktemp -d)"
-
-download_file "$trojango_link" "$trojandir/trojan-go.zip"
-
-unzip -qo "$trojandir/trojan-go.zip" -d "$trojandir"
-
-if [ ! -f "$trojandir/trojan-go" ]; then
-    echo -e "${RED}Trojan-Go binary not found after extraction.${NC}"
-    exit 1
-fi
-
-install -m 0755 \
-    "$trojandir/trojan-go" \
-    /usr/local/bin/trojan-go
-
-ln -sf /usr/local/bin/trojan-go /usr/bin/trojan-go
-
-rm -rf "$trojandir"
-
-# ============================================================
-# Trojan-Go Config
-# ============================================================
-
-cat > /etc/trojan-go/config.json << END
-{
-  "run_type": "server",
-
-  "local_addr": "0.0.0.0",
-  "local_port": 2087,
-
-  "remote_addr": "127.0.0.1",
-  "remote_port": 89,
-
-  "log_level": 1,
-  "log_file": "/var/log/trojan-go/trojan-go.log",
-
-  "password": [
-    "${uuid6}"
-  ],
-
-  "disable_http_check": true,
-  "udp_timeout": 60,
-
-  "ssl": {
-    "verify": false,
-    "verify_hostname": false,
-
-    "cert": "${path_crt}",
-    "key": "${path_key}",
-
-    "key_password": "",
-
-    "cipher": "",
-    "curves": "",
-
-    "prefer_server_cipher": false,
-
-    "sni": "${domain}",
-
-    "alpn": [
-      "http/1.1"
-    ],
-
-    "session_ticket": true,
-    "reuse_session": true,
-
-    "plain_http_response": "",
-
-    "fallback_addr": "127.0.0.1",
-    "fallback_port": 0,
-
-    "fingerprint": "firefox"
-  },
-
-  "tcp": {
-    "no_delay": true,
-    "keep_alive": true,
-    "prefer_ipv4": true
-  },
-
-  "mux": {
-    "enabled": false,
-    "concurrency": 8,
-    "idle_timeout": 60
-  },
-
-  "websocket": {
-    "enabled": true,
-    "path": "/trojango",
-    "host": "${domain}"
-  },
-
-  "api": {
-    "enabled": false,
-    "api_addr": "",
-    "api_port": 0,
-
-    "ssl": {
-      "enabled": false,
-      "key": "",
-      "cert": "",
-      "verify_client": false,
-      "client_cert": []
-    }
-  }
-}
-END
-
-# ============================================================
-# Trojan-Go UUID
-# ============================================================
-
-cat > /etc/trojan-go/uuid.txt << END
-${uuid6}
-END
-
-# ============================================================
-# Trojan-Go Service
-# ============================================================
-
-cat > /etc/systemd/system/trojan-go.service << END
-[Unit]
-Description=Trojan-Go Service By Akbar Maulana
-Documentation=https://t.me/Akbar218
-After=network.target nss-lookup.target
-
-[Service]
-Type=simple
-User=root
-
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-
-ExecStart=/usr/local/bin/trojan-go -config /etc/trojan-go/config.json
-
-Restart=on-failure
-RestartSec=3
-RestartPreventExitStatus=23
-
-LimitNOFILE=1048576
-
-[Install]
-WantedBy=multi-user.target
-END
-
-# ============================================================
-# Firewall
-# ============================================================
-
-echo -e "${CYAN}[9/10] Configuring firewall...${NC}"
-
-iptables -C INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p tcp --dport 80 -j ACCEPT
-
-iptables -C INPUT -p tcp --dport 8443 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p tcp --dport 8443 -j ACCEPT
-
-iptables -C INPUT -p tcp --dport 2087 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p tcp --dport 2087 -j ACCEPT
-
-iptables -C INPUT -p udp --dport 2087 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p udp --dport 2087 -j ACCEPT
-
-# Keep your existing firewall port
-iptables -C INPUT -p tcp --dport 2083 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p tcp --dport 2083 -j ACCEPT
-
-iptables -C INPUT -p udp --dport 2083 -j ACCEPT 2>/dev/null ||
-iptables -I INPUT -p udp --dport 2083 -j ACCEPT
-
-iptables-save > /etc/iptables.up.rules
-
-netfilter-persistent save >/dev/null 2>&1 || true
-netfilter-persistent reload >/dev/null 2>&1 || true
-
-# ============================================================
-# Start Services
-# ============================================================
-
-echo -e "${CYAN}[10/10] Starting services...${NC}"
+EOF
 
 systemctl daemon-reload
+systemctl enable xray
 
-systemctl enable xray.service >/dev/null
-systemctl enable trojan-go.service >/dev/null
-systemctl enable nginx.service >/dev/null
+systemctl restart xray || die "Xray service failed to start."
 
-systemctl restart xray.service
 sleep 2
 
-systemctl restart nginx.service
-sleep 2
-
-systemctl restart trojan-go.service
-sleep 2
-
-# ============================================================
-# Service Verification
-# ============================================================
-
-echo
-echo -e "${CYAN}Checking services...${NC}"
-
-if systemctl is-active --quiet xray.service; then
-    echo -e "${GREEN}[OK] Xray${NC}"
+if systemctl is-active --quiet xray; then
+    ok "Xray service is running."
 else
-    echo -e "${RED}[FAIL] Xray${NC}"
-    journalctl -u xray.service --no-pager -n 30
-    exit 1
-fi
-
-if systemctl is-active --quiet nginx.service; then
-    echo -e "${GREEN}[OK] Nginx${NC}"
-else
-    echo -e "${RED}[FAIL] Nginx${NC}"
-    nginx -t || true
-    journalctl -u nginx.service --no-pager -n 30
-    exit 1
-fi
-
-if systemctl is-active --quiet trojan-go.service; then
-    echo -e "${GREEN}[OK] Trojan-Go${NC}"
-else
-    echo -e "${RED}[FAIL] Trojan-Go${NC}"
-    journalctl -u trojan-go.service --no-pager -n 30
-    exit 1
+    journalctl -u xray --no-pager -n 50
+    die "Xray service failed."
 fi
 
 # ============================================================
-# Domain Copy
+# FIREWALL
 # ============================================================
 
-if [ -f /root/domain ]; then
-    cp -f /root/domain /etc/xray/domain
+info "Configuring firewall..."
+
+iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+iptables -I INPUT -p tcp --dport 8443 -j ACCEPT
+iptables -I INPUT -p tcp --dport 10443 -j ACCEPT
+
+iptables-save > /etc/iptables.up.rules 2>/dev/null || true
+
+if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save || true
+    netfilter-persistent reload || true
 fi
 
 # ============================================================
-# Save Information
+# INFORMATION FILE
 # ============================================================
 
-cat > /etc/xray/uuid.txt << END
-VMESS_TLS=${uuid1}
-VMESS_NONE_TLS=${uuid2}
-VLESS_TLS=${uuid3}
-VLESS_NONE_TLS=${uuid4}
-TROJAN=${uuid5}
-TROJAN_GO=${uuid6}
-END
-
-chmod 600 /etc/xray/uuid.txt
-
-# ============================================================
-# Installation Log
-# ============================================================
-
-cat > /root/xray-install-info.txt << END
+cat > "$INFO_FILE" <<EOF
 ============================================================
 XRAY INSTALLATION
 ============================================================
+Date:
+$START_TIME
 
 Domain:
-${domain}
+$DOMAIN
 
 Public IP:
-${MYIP}
+$MYIP
+
+Xray Version:
+$XRAY_VERSION
 
 ------------------------------------------------------------
 VMESS TLS
 ------------------------------------------------------------
-Port : 8443
-Path : /vmess/
-UUID : ${uuid1}
-
-------------------------------------------------------------
-VMESS NONE TLS
-------------------------------------------------------------
-Port : 80
-Path : /vmess/
-UUID : ${uuid2}
+Public Port : 8443
+Path        : /vmess/
+UUID        : $UUID_VMESS_TLS
 
 ------------------------------------------------------------
 VLESS TLS
 ------------------------------------------------------------
-Port : 8443
-Path : /vless/
-UUID : ${uuid3}
-
-------------------------------------------------------------
-VLESS NONE TLS
-------------------------------------------------------------
-Port : 80
-Path : /vless/
-UUID : ${uuid4}
+Public Port : 8443
+Path        : /vless/
+UUID        : $UUID_VLESS_TLS
 
 ------------------------------------------------------------
 TROJAN WS TLS
 ------------------------------------------------------------
-Port     : 8443
-Path     : /trojan/
-Password : ${uuid5}
+Public Port : 8443
+Path        : /trojan/
+Password    : $UUID_TROJAN
 
 ------------------------------------------------------------
-TROJAN-GO WS
+VLESS gRPC TLS
 ------------------------------------------------------------
-Port     : 2087
-Path     : /trojango
-Password : ${uuid6}
+Public Port : 8443
+ServiceName : vless-grpc
+UUID        : $UUID_VLESS_GRPC
+
+------------------------------------------------------------
+TROJAN gRPC TLS
+------------------------------------------------------------
+Public Port : 8443
+ServiceName : trojan-grpc
+Password    : $UUID_TROJAN_GRPC
+
+------------------------------------------------------------
+VLESS XHTTP
+------------------------------------------------------------
+Public Port : 8443
+Path        : /xhttp/
+UUID        : $UUID_VLESS_XHTTP
+
+------------------------------------------------------------
+VMESS HTTP
+------------------------------------------------------------
+Public Port : 80
+Path        : /vmess/
+UUID        : $UUID_VMESS_HTTP
+
+------------------------------------------------------------
+VLESS HTTP
+------------------------------------------------------------
+Public Port : 80
+Path        : /vless/
+UUID        : $UUID_VLESS_HTTP
+
+------------------------------------------------------------
+VLESS XHTTP HTTP
+------------------------------------------------------------
+Public Port : 80
+Path        : /xhttp/
+UUID        : $UUID_VLESS_XHTTP_HTTP
+
+------------------------------------------------------------
+VLESS REALITY
+------------------------------------------------------------
+Public Port : 10443
+UUID        : $UUID_REALITY
+ServerName  : $REALITY_SERVER_NAME
+Destination : $REALITY_DEST
+PrivateKey  : $PRIVATE_KEY
+PublicKey   : $PUBLIC_KEY
+ShortID     : 0123456789abcdef
+Flow        : xtls-rprx-vision
 
 ------------------------------------------------------------
 CERTIFICATE
 ------------------------------------------------------------
-Certificate : ${path_crt}
-Private Key : ${path_key}
+Certificate : /etc/xray/xray.crt
+Private Key : /etc/xray/xray.key
 
 ------------------------------------------------------------
 SERVICES
 ------------------------------------------------------------
-Xray      : xray.service
-Nginx     : nginx.service
-Trojan-Go : trojan-go.service
+Xray        : xray.service
+Nginx       : nginx.service
 
 ------------------------------------------------------------
 INTERNAL PORTS
 ------------------------------------------------------------
-VMess TLS       : ${VMESS_TLS_PORT}
-VLESS TLS       : ${VLESS_TLS_PORT}
-Trojan TLS      : ${TROJAN_TLS_PORT}
-VMess None TLS  : ${VMESS_HTTP_PORT}
-VLESS None TLS  : ${VLESS_HTTP_PORT}
+VMess WS TLS       : 10001
+VLESS WS TLS       : 10002
+Trojan WS TLS      : 10003
+VMess WS HTTP      : 10004
+VLESS WS HTTP      : 10005
+VLESS gRPC         : 10006
+Trojan gRPC        : 10007
+VLESS XHTTP TLS    : 10008
+VLESS XHTTP HTTP   : 10009
+Reality            : 10443
 
+------------------------------------------------------------
+LOGS
+------------------------------------------------------------
+Installer Log : $LOG_FILE
+Xray Access   : /var/log/xray/access.log
+Xray Error    : /var/log/xray/error.log
 ============================================================
-END
+EOF
 
 # ============================================================
-# Final Output
+# COMPATIBILITY FILES
 # ============================================================
 
-clear
+mkdir -p /var/lib/akbarstorevpn
 
-echo -e "${GREEN}"
-echo "============================================================"
-echo "              XRAY INSTALLATION COMPLETED"
-echo "============================================================"
-echo -e "${NC}"
+cat > /var/lib/akbarstorevpn/ipvps.conf <<EOF
+IP=$MYIP
+EOF
 
-echo -e "${CYAN}Domain:${NC} ${domain}"
-echo -e "${CYAN}IP:${NC}     ${MYIP:-unknown}"
+# ============================================================
+# DISPLAY
+# ============================================================
+
 echo
-
-echo -e "${GREEN}VMess TLS${NC}"
-echo "  Port : 8443"
-echo "  Path : /vmess/"
-echo "  UUID : ${uuid1}"
-echo
-
-echo -e "${GREEN}VMess None TLS${NC}"
-echo "  Port : 80"
-echo "  Path : /vmess/"
-echo "  UUID : ${uuid2}"
-echo
-
-echo -e "${GREEN}VLESS TLS${NC}"
-echo "  Port : 8443"
-echo "  Path : /vless/"
-echo "  UUID : ${uuid3}"
-echo
-
-echo -e "${GREEN}VLESS None TLS${NC}"
-echo "  Port : 80"
-echo "  Path : /vless/"
-echo "  UUID : ${uuid4}"
-echo
-
-echo -e "${GREEN}Trojan WS TLS${NC}"
-echo "  Port     : 8443"
-echo "  Path     : /trojan/"
-echo "  Password : ${uuid5}"
-echo
-
-echo -e "${GREEN}Trojan-Go WS${NC}"
-echo "  Port     : 2087"
-echo "  Path     : /trojango"
-echo "  Password : ${uuid6}"
-echo
-
-echo -e "${GREEN}Services:${NC}"
-echo "  Xray      : $(systemctl is-active xray.service)"
-echo "  Nginx     : $(systemctl is-active nginx.service)"
-echo "  Trojan-Go : $(systemctl is-active trojan-go.service)"
-echo
-
 echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN}Installation completed successfully.${NC}"
+echo -e "${GREEN}             XRAY INSTALLATION COMPLETED${NC}"
+echo -e "${GREEN}============================================================${NC}"
+echo
+echo -e "${WHITE}Domain:${NC} $DOMAIN"
+echo
+echo -e "${CYAN}TLS:${NC}     8443"
+echo -e "${CYAN}HTTP:${NC}    80"
+echo -e "${CYAN}Reality:${NC} 10443"
+echo
+echo "VMess TLS       : 8443 /vmess/"
+echo "VLESS TLS       : 8443 /vless/"
+echo "Trojan TLS      : 8443 /trojan/"
+echo "VLESS gRPC      : 8443 /grpc/"
+echo "Trojan gRPC     : 8443 /trojan-grpc/"
+echo "VLESS XHTTP     : 8443 /xhttp/"
+echo
+echo "VMess HTTP      : 80 /vmess/"
+echo "VLESS HTTP      : 80 /vless/"
+echo "VLESS XHTTP     : 80 /xhttp/"
+echo
+echo "VLESS Reality   : 10443"
+echo
+echo -e "${YELLOW}Installation log:${NC}"
+echo "$LOG_FILE"
+echo
+echo -e "${YELLOW}Connection information:${NC}"
+echo "$INFO_FILE"
+echo
 echo -e "${GREEN}============================================================${NC}"
 echo
 
-echo "Information saved to:"
-echo "/root/xray-install-info.txt"
-echo "/etc/xray/uuid.txt"
+# ============================================================
+# FINAL STATUS
+# ============================================================
+
+systemctl --no-pager --full status xray | tail -n 15 || true
+systemctl --no-pager --full status nginx | tail -n 15 || true
+
 echo
-
-# ============================================================
-# Optional compatibility file
-# ============================================================
-
-if [ -f /root/domain ]; then
-    cp -f /root/domain /etc/xray/domain
-fi
-
-exit 0
+echo -e "${GREEN}Done.${NC}"
