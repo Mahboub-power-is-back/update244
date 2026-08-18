@@ -52,11 +52,11 @@ if [ -f /etc/default/dropbear ]; then
   sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear || true
   sed -i 's/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/' /etc/default/dropbear || true
   grep -q '^DROPBEAR_EXTRA_ARGS=' /etc/default/dropbear \
-    && sed -i 's|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS="-p 109 -p 143"|' /etc/default/dropbear \
-    || echo 'DROPBEAR_EXTRA_ARGS="-p 109 -p 143"' >> /etc/default/dropbear
+    && sed -i 's|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS="-p 143"|' /etc/default/dropbear \
+    || echo 'DROPBEAR_EXTRA_ARGS="-p 143"' >> /etc/default/dropbear
 fi
-systemctl enable --now dropbear
-systemctl restart dropbear || true
+systemctl enable dropbear 2>/dev/null || true
+systemctl restart dropbear 2>/dev/null || warn "Dropbear is not running; continuing with OpenSSH/WS."
 
 # ------------------------------------------------------------
 # WebSocket helper scripts
@@ -65,7 +65,7 @@ cat > /usr/local/bin/ws-nontls <<'PY'
 #!/usr/bin/env python3
 import socket,select,sys,threading
 PORT=int(sys.argv[1]) if len(sys.argv)>1 else 8880
-TARGET_DEFAULT="127.0.0.1:109"
+TARGET_DEFAULT="127.0.0.1:22"
 BUF=16384
 def header(data,name):
     try:
@@ -91,7 +91,7 @@ def client(c):
     try:
         d=c.recv(BUF)
         target=header(d,"X-Real-Host") or TARGET_DEFAULT
-        host,port=(target.rsplit(":",1)+[""])[:2] if ":" in target else (target,"109")
+        host,port=(target.rsplit(":",1)+[""])[:2] if ":" in target else (target,"22")
         if host not in ("127.0.0.1","localhost"):
             c.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\n"); return
         s=socket.create_connection((host,int(port)),5)
