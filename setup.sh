@@ -200,6 +200,21 @@ download_script "$XRAY_PATH/ins-xray.sh" /root/ins-xray.sh \
 run_screened /root/ins-xray.sh \
     "Corrected Xray installer" xray /tmp/akbar-xray.rc
 
+# Xray is a required part of the 80/443/8443 multiplexer.
+# Never continue to the remaining installers with a failed Xray stack.
+if [ ! -s /etc/xray/config.json ] || ! /usr/local/bin/xray run -test -config /etc/xray/config.json >/tmp/akbar-xray-validation.log 2>&1; then
+    cat /tmp/akbar-xray-validation.log 2>/dev/null || true
+    die "Xray installation/validation failed. Installation stopped before SSH/OVPN WebSocket."
+fi
+if ! systemctl is-active --quiet xray; then
+    systemctl start xray 2>/tmp/akbar-xray-start-error.log || {
+        cat /tmp/akbar-xray-start-error.log 2>/dev/null || true
+        journalctl -u xray -n 80 --no-pager 2>/dev/null || true
+        die "Xray configuration is valid but the Xray service failed to start."
+    }
+fi
+ok "Xray service is active."
+
 # ============================================================
 # SSH / OPENVPN / WEBSOCKET
 # ============================================================
