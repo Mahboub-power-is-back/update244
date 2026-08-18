@@ -7,6 +7,8 @@
 #
 # Public:
 #   80/443/8443 -> Xray/Nginx multiplexing
+#   SSH WS      -> /ssh on 80/443/8443
+#   OVPN WS     -> /ovpn-ws on 80/443/8443
 #
 # Internal:
 #   SSH WS       -> 8880
@@ -176,7 +178,8 @@ systemctl daemon-reload
 systemctl enable --now ws-nontls ws-ovpn
 
 # ------------------------------------------------------------
-# Nginx: only internal web backend. Never bind public 443.
+# Nginx: internal HTTP/WebSocket router. Public 80 is reached through HAProxy;
+# public 443/8443 are reached through Xray fallbacks. Never bind public 443.
 # ------------------------------------------------------------
 mkdir -p /home/vps/public_html
 if ! id vps >/dev/null 2>&1; then useradd -m vps; fi
