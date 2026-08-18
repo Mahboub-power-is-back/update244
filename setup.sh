@@ -1,90 +1,408 @@
 #!/bin/bash
+
+# ============================================================
+#                  MAHBOUB VPN - SETUP
+#          Ubuntu / Debian Installation Script
+# ============================================================
+
 if [ "${EUID}" -ne 0 ]; then
-		echo "You need to run this script as root"
-		exit 1
+    echo "You need to run this script as root"
+    exit 1
 fi
-if [ "$(systemd-detect-virt)" == "openvz" ]; then
-		echo "OpenVZ is not supported"
-		exit 1
-fi
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Link Hosting Kalian Untuk Ssh Vpn
-akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ssh"
-# Link Hosting Kalian Untuk Sstp
-akbarvpnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/sstp"
-# Link Hosting Kalian Untuk Ssr
-akbarvpnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ssr"
-# Link Hosting Kalian Untuk Shadowsocks
-akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/shadowsocks"
-# Link Hosting Kalian Untuk Wireguard
-akbarvpnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/wireguard"
-# Link Hosting Kalian Untuk Xray
-akbarvpnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/xray"
-# Link Hosting Kalian Untuk Ipsec
-akbarvpnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ipsec"
-# Link Hosting Kalian Untuk Backup
-akbarvpnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/backup"
-# Link Hosting Kalian Untuk Websocket
-akbarvpnnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/websocket"
-# Link Hosting Kalian Untuk Ohp
-akbarvpnnnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ohp"
 
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-echo "Checking VPS"
-IZIN=$(wget -qO- ipinfo.io/ip);
-
-rm -f setup.sh
 clear
-if [ -f "/etc/xray/domain" ]; then
-echo "Script Already Installed"
-exit 0
-fi
-mkdir /var/lib/akbarstorevpn;
-echo "IP=" >> /var/lib/akbarstorevpn/ipvps.conf
-wget https://${akbarvpn}/cf.sh && chmod +x cf.sh && ./cf.sh
-#install v2ray
-wget https://${akbarvpnnnnnn}/ins-xray.sh && chmod +x ins-xray.sh && screen -S xray ./ins-xray.sh
-#install ssh ovpn
-wget https://${akbarvpn}/ssh-vpn.sh && chmod +x ssh-vpn.sh && screen -S ssh-vpn ./ssh-vpn.sh
-wget https://${akbarvpnn}/sstp.sh && chmod +x sstp.sh && screen -S sstp ./sstp.sh
-#install ssr
-wget https://${akbarvpnnn}/ssr.sh && chmod +x ssr.sh && screen -S ssr ./ssr.sh
-wget https://${akbarvpnnnn}/sodosok.sh && chmod +x sodosok.sh && screen -S ss ./sodosok.sh
-#installwg
-wget https://${akbarvpnnnnn}/wg.sh && chmod +x wg.sh && screen -S wg ./wg.sh
-#install L2TP
-wget https://${akbarvpnnnnnnn}/ipsec.sh && chmod +x ipsec.sh && screen -S ipsec ./ipsec.sh
-wget https://${akbarvpnnnnnnnn}/set-br.sh && chmod +x set-br.sh && ./set-br.sh
-# Websocket
-wget https://${akbarvpnnnnnnnnn}/edu.sh && chmod +x edu.sh && ./edu.sh
-# Ohp Server
-wget https://${akbarvpnnnnnnnnnn}/ohp.sh && chmod +x ohp.sh && ./ohp.sh
 
-rm -f /root/ssh-vpn.sh
-rm -f /root/sstp.sh
-rm -f /root/wg.sh
-rm -f /root/ss.sh
-rm -f /root/ssr.sh
-rm -f /root/ins-xray.sh
-rm -f /root/ipsec.sh
-rm -f /root/set-br.sh
-rm -f /root/edu.sh
-rm -f /root/ohp.sh
-cat <<EOF> /etc/systemd/system/autosett.service
+# ============================================================
+# COLORS
+# ============================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# ============================================================
+# REPOSITORY
+# ============================================================
+
+BASE="https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main"
+
+SSH="$BASE/ssh"
+SSTP="$BASE/sstp"
+SSR="$BASE/ssr"
+SS="$BASE/shadowsocks"
+WG="$BASE/wireguard"
+XRAY="$BASE/xray"
+IPSEC="$BASE/ipsec"
+BACKUP="$BASE/backup"
+WS="$BASE/websocket"
+OHP="$BASE/ohp"
+TRGO="$BASE/trojango"
+
+LOG="/root/log-install.txt"
+ERROR_LOG="/root/install-error.log"
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+touch "$LOG" "$ERROR_LOG"
+
+exec > >(tee -a "$LOG") 2> >(tee -a "$ERROR_LOG" >&2)
+
+trap 'echo -e "${RED}[ERROR]${NC} Command failed at line $LINENO: $BASH_COMMAND"; echo "[ERROR] $(date) line $LINENO: $BASH_COMMAND" >> "$ERROR_LOG"' ERR
+
+echo
+echo "============================================================"
+echo "              AKBAR VPN INSTALLER"
+echo "============================================================"
+echo
+
+# ============================================================
+# VPS CHECK
+# ============================================================
+
+echo -e "${CYAN}[INFO]${NC} Checking VPS..."
+
+MYIP=$(curl -4 -fsSL --max-time 10 https://ipinfo.io/ip 2>/dev/null || true)
+
+echo "Public IP : ${MYIP:-Unknown}"
+
+if command -v systemd-detect-virt >/dev/null 2>&1; then
+    VIRT=$(systemd-detect-virt || true)
+
+    if [ "$VIRT" = "openvz" ]; then
+        echo -e "${RED}[ERROR]${NC} OpenVZ is not supported"
+        exit 1
+    fi
+fi
+
+# ============================================================
+# PACKAGE MANAGER
+# ============================================================
+
+echo -e "${CYAN}[INFO]${NC} Checking package manager..."
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Wait for another apt/dpkg process instead of fighting it
+wait_for_apt() {
+    local timeout=600
+    local elapsed=0
+
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+       || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+       || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo -e "${RED}[ERROR]${NC} Package manager remained locked for ${timeout}s"
+            return 1
+        fi
+
+        echo -e "${YELLOW}[WAIT]${NC} Another apt/dpkg process is running..."
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    return 0
+}
+
+wait_for_apt || exit 1
+
+# Repair interrupted package operations
+dpkg --configure -a || true
+
+wait_for_apt || exit 1
+
+apt-get update -y
+
+# ============================================================
+# BASIC DEPENDENCIES
+# ============================================================
+
+echo -e "${CYAN}[INFO]${NC} Installing basic dependencies..."
+
+wait_for_apt || exit 1
+
+apt-get install -y \
+    curl \
+    wget \
+    ca-certificates \
+    unzip \
+    zip \
+    tar \
+    gzip \
+    xz-utils \
+    socat \
+    cron \
+    bash-completion \
+    openssl \
+    gnupg \
+    gnupg2 \
+    lsb-release \
+    dnsutils \
+    iptables \
+    iptables-persistent \
+    netfilter-persistent \
+    screen \
+    jq \
+    lsof \
+    procps \
+    systemd \
+    chrony \
+    python3 \
+    sed \
+    grep \
+    gawk \
+    coreutils
+
+# ntpdate was removed from newer Ubuntu releases.
+# Use ntpsec-ntpdate when available, but don't fail installation.
+if apt-cache show ntpsec-ntpdate >/dev/null 2>&1; then
+    apt-get install -y ntpsec-ntpdate || true
+fi
+
+# ============================================================
+# TIME
+# ============================================================
+
+echo -e "${CYAN}[INFO]${NC} Configuring time synchronization..."
+
+timedatectl set-timezone Asia/Jakarta 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+
+systemctl enable chrony 2>/dev/null || true
+systemctl restart chrony 2>/dev/null || true
+
+if command -v chronyc >/dev/null 2>&1; then
+    chronyc -a makestep 2>/dev/null || true
+fi
+
+date
+
+# ============================================================
+# SERVER DIRECTORY
+# ============================================================
+
+mkdir -p /var/lib/akbarstorevpn
+
+if [ ! -f /var/lib/akbarstorevpn/ipvps.conf ]; then
+    echo "IP=$MYIP" > /var/lib/akbarstorevpn/ipvps.conf
+else
+    sed -i "s/^IP=.*/IP=$MYIP/" /var/lib/akbarstorevpn/ipvps.conf
+fi
+
+# ============================================================
+# DOWNLOAD FUNCTION
+# ============================================================
+
+download_script() {
+    local url="$1"
+    local output="$2"
+
+    echo -e "${CYAN}[DOWNLOAD]${NC} $output"
+
+    if curl -fL --retry 3 --retry-delay 2 "$url" -o "$output"; then
+        chmod +x "$output"
+        echo -e "${GREEN}[OK]${NC} $output downloaded"
+        return 0
+    fi
+
+    echo -e "${RED}[ERROR]${NC} Failed to download $url"
+    return 1
+}
+
+run_script() {
+    local script="$1"
+    local session="$2"
+
+    if [ ! -f "$script" ]; then
+        echo -e "${RED}[ERROR]${NC} Missing $script"
+        return 1
+    fi
+
+    chmod +x "$script"
+
+    echo
+    echo "============================================================"
+    echo "Running: $script"
+    echo "============================================================"
+
+    screen -S "$session" -X quit >/dev/null 2>&1 || true
+
+    screen -dmS "$session" bash -c "./$script; exit \$?"
+
+    while screen -list | grep -q "\.${session}[[:space:]]"; do
+        sleep 2
+    done
+
+    return 0
+}
+
+# ============================================================
+# DOMAIN / CLOUDFLARE SETUP
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                DOMAIN CONFIGURATION"
+echo "============================================================"
+
+download_script "$SSH/cf.sh" /root/cf.sh
+./cf.sh
+
+# ============================================================
+# XRAY
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                    XRAY INSTALL"
+echo "============================================================"
+
+download_script "$XRAY/ins-xray.sh" /root/ins-xray.sh
+
+run_script /root/ins-xray.sh xray
+
+# ============================================================
+# SSH / OPENVPN
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                 SSH / OPENVPN INSTALL"
+echo "============================================================"
+
+download_script "$SSH/ssh-vpn.sh" /root/ssh-vpn.sh
+run_script /root/ssh-vpn.sh ssh-vpn
+
+# ============================================================
+# SSTP
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                    SSTP INSTALL"
+echo "============================================================"
+
+download_script "$SSTP/sstp.sh" /root/sstp.sh
+run_script /root/sstp.sh sstp
+
+# ============================================================
+# SSR
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                     SSR INSTALL"
+echo "============================================================"
+
+download_script "$SSR/ssr.sh" /root/ssr.sh
+run_script /root/ssr.sh ssr
+
+# ============================================================
+# SHADOWSOCKS
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                 SHADOWSOCKS INSTALL"
+echo "============================================================"
+
+download_script "$SS/sodosok.sh" /root/sodosok.sh
+run_script /root/sodosok.sh shadowsocks
+
+# ============================================================
+# WIREGUARD
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                  WIREGUARD INSTALL"
+echo "============================================================"
+
+download_script "$WG/wg.sh" /root/wg.sh
+run_script /root/wg.sh wireguard
+
+# ============================================================
+# IPSEC / L2TP / PPTP
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                 IPSEC / L2TP INSTALL"
+echo "============================================================"
+
+download_script "$IPSEC/ipsec.sh" /root/ipsec.sh
+run_script /root/ipsec.sh ipsec
+
+# ============================================================
+# BACKUP / BRIDGE
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                 BACKUP / BRIDGE SETUP"
+echo "============================================================"
+
+download_script "$BACKUP/set-br.sh" /root/set-br.sh
+./set-br.sh
+
+# ============================================================
+# WEBSOCKET
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                  WEBSOCKET INSTALL"
+echo "============================================================"
+
+download_script "$WS/edu.sh" /root/edu.sh
+./edu.sh
+
+# ============================================================
+# OHP
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                    OHP INSTALL"
+echo "============================================================"
+
+download_script "$OHP/ohp.sh" /root/ohp.sh
+./ohp.sh
+
+# ============================================================
+# TROJAN-GO MENU SUPPORT
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                  TROJAN-GO SUPPORT"
+echo "============================================================"
+
+# Download account-management scripts if available.
+download_script "$TRGO/addtrgo.sh" /root/addtrgo.sh || true
+download_script "$TRGO/cektrgo.sh" /root/cektrgo.sh || true
+download_script "$TRGO/deltrgo.sh" /root/deltrgo.sh || true
+download_script "$TRGO/renewtrgo.sh" /root/renewtrgo.sh || true
+
+# ============================================================
+# AUTO SETTINGS SERVICE
+# ============================================================
+
+echo
+echo "============================================================"
+echo "                 AUTO SETTINGS SERVICE"
+echo "============================================================"
+
+cat > /etc/systemd/system/autosett.service <<'EOF'
 [Unit]
-Description=autosetting
-Documentation=https://t.me/Akbar218
+Description=Akbar VPN Auto Settings
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -94,63 +412,132 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
+
+download_script "$SSH/set.sh" /etc/set.sh || true
+
+chmod +x /etc/set.sh 2>/dev/null || true
+
 systemctl daemon-reload
-systemctl enable autosett
-wget -O /etc/set.sh "https://${akbarvpn}/set.sh"
-chmod +x /etc/set.sh
-history -c
-echo "1.2" > /home/ver
-echo " "
-echo "Installation has been completed!!"
-echo " "
-echo "============================================================================" | tee -a log-install.txt
-echo "" | tee -a log-install.txt
-echo "----------------------------------------------------------------------------" | tee -a log-install.txt
-echo ""  | tee -a log-install.txt
-echo "   >>> Service & Port"  | tee -a log-install.txt
-echo "   - OpenSSH                 : 443, 22"  | tee -a log-install.txt
-echo "   - OpenVPN                 : TCP 1194, UDP 2200, SSL 990"  | tee -a log-install.txt
-echo "   - Stunnel5                : 443, 445, 777"  | tee -a log-install.txt
-echo "   - Dropbear                : 443, 109, 143"  | tee -a log-install.txt
-echo "   - Squid Proxy             : 3128, 8080"  | tee -a log-install.txt
-echo "   - Badvpn                  : 7100, 7200, 7300"  | tee -a log-install.txt
-echo "   - Nginx                   : 89"  | tee -a log-install.txt
-echo "   - Wireguard               : 7070"  | tee -a log-install.txt
-echo "   - L2TP/IPSEC VPN          : 1701"  | tee -a log-install.txt
-echo "   - PPTP VPN                : 1732"  | tee -a log-install.txt
-echo "   - SSTP VPN                : 444"  | tee -a log-install.txt
-echo "   - Shadowsocks-R           : 1443-1543"  | tee -a log-install.txt
-echo "   - SS-OBFS TLS             : 2443-2543"  | tee -a log-install.txt
-echo "   - SS-OBFS HTTP            : 3443-3543"  | tee -a log-install.txt
-echo "   - XRAYS Vmess TLS         : 8443"  | tee -a log-install.txt
-echo "   - XRAYS Vmess None TLS    : 80"  | tee -a log-install.txt
-echo "   - XRAYS Vless TLS         : 8443"  | tee -a log-install.txt
-echo "   - XRAYS Vless None TLS    : 80"  | tee -a log-install.txt
-echo "   - XRAYS Trojan            : 8443"  | tee -a log-install.txt
-echo "   - Websocket TLS           : 443"  | tee -a log-install.txt
-echo "   - Websocket None TLS      : 8880"  | tee -a log-install.txt
-echo "   - Websocket Ovpn          : 2086"  | tee -a log-install.txt
-echo "   - OHP SSH                 : 8181"  | tee -a log-install.txt
-echo "   - OHP Dropbear            : 8282"  | tee -a log-install.txt
-echo "   - OHP OpenVPN             : 8383"  | tee -a log-install.txt
-echo "   - Tr Go                   : 2087"  | tee -a log-install.txt
-echo "   - udpcustom               : 1-65535"  | tee -a log-install.txt
-echo ""  | tee -a log-install.txt
-echo "   >>> Server Information & Other Features"  | tee -a log-install.txt
-echo "   - Timezone                : Asia/Jakarta (GMT +7)"  | tee -a log-install.txt
-echo "   - Fail2Ban                : [ON]"  | tee -a log-install.txt
-echo "   - Dflate                  : [ON]"  | tee -a log-install.txt
-echo "   - IPtables                : [ON]"  | tee -a log-install.txt
-echo "   - Auto-Reboot             : [ON]"  | tee -a log-install.txt
-echo "   - IPv6                    : [OFF]"  | tee -a log-install.txt
-echo "   - Autoreboot On 05.00 GMT +7" | tee -a log-install.txt
-echo "   - Autobackup Data" | tee -a log-install.txt
-echo "   - Restore Data" | tee -a log-install.txt
-echo "   - Auto Delete Expired Account" | tee -a log-install.txt
-echo "   - Full Orders For Various Services" | tee -a log-install.txt
-echo "   - White Label" | tee -a log-install.txt
-echo "   - Installation Log --> /root/log-install.txt"  | tee -a log-install.txt
-echo " Reboot 15 Sec"
-sleep 15
-rm -f setup.sh
-reboot
+systemctl enable autosett.service
+systemctl start autosett.service || true
+
+# ============================================================
+# CLEANUP
+# ============================================================
+
+rm -f /root/ssh-vpn.sh
+rm -f /root/sstp.sh
+rm -f /root/wg.sh
+rm -f /root/sodosok.sh
+rm -f /root/ss.sh
+rm -f /root/ssr.sh
+rm -f /root/ins-xray.sh
+rm -f /root/ipsec.sh
+rm -f /root/set-br.sh
+rm -f /root/edu.sh
+rm -f /root/ohp.sh
+
+# ============================================================
+# VERSION
+# ============================================================
+
+echo "2.0" > /home/ver
+
+# ============================================================
+# INSTALLATION INFORMATION
+# ============================================================
+
+echo
+echo "============================================================"
+echo "              INSTALLATION COMPLETED"
+echo "============================================================"
+echo
+
+echo "Xray TLS port : 8443"
+echo "Xray HTTP port: 80"
+echo "Xray Reality  : configured by ins-xray.sh"
+echo "Xhttp         : configured by ins-xray.sh"
+echo "WebSocket     : configured by ins-xray.sh"
+echo "gRPC          : configured by ins-xray.sh"
+echo "Trojan-Go     : configured by ins-xray.sh"
+echo
+
+echo "------------------------------------------------------------"
+echo "SERVICE PORTS"
+echo "------------------------------------------------------------"
+
+echo "OpenSSH                 : 22, 443"
+echo "OpenVPN                 : 1194, 2200, 990"
+echo "Stunnel5                : 443, 445, 777"
+echo "Dropbear                : 443, 109, 143"
+echo "Squid                   : 3128, 8080"
+echo "BadVPN                  : 7100, 7200, 7300"
+echo "Nginx                   : 89"
+echo "WireGuard               : 7070"
+echo "L2TP/IPSEC              : 1701"
+echo "PPTP                    : 1732"
+echo "SSTP                    : 444"
+echo "Shadowsocks-R           : 1443-1543"
+echo "SS-OBFS TLS             : 2443-2543"
+echo "SS-OBFS HTTP            : 3443-3543"
+echo "Xray TLS                : 8443"
+echo "Xray HTTP               : 80"
+echo "WebSocket TLS           : 443"
+echo "WebSocket None TLS      : 8880"
+echo "WebSocket OpenVPN       : 2086"
+echo "Trojan-Go               : 2087"
+echo "OHP SSH                 : 8181"
+echo "OHP Dropbear            : 8282"
+echo "OHP OpenVPN             : 8383"
+
+echo
+echo "------------------------------------------------------------"
+echo "SERVER INFORMATION"
+echo "------------------------------------------------------------"
+
+echo "Public IP               : $MYIP"
+echo "Timezone                : Asia/Jakarta"
+echo "Fail2Ban                : ON"
+echo "IPTables                : ON"
+echo "Auto-Reboot             : ON"
+echo "IPv6                    : OFF"
+echo "Auto Backup             : ON"
+echo "Restore Data            : ON"
+echo "Auto Delete Expired     : ON"
+echo "White Label             : ON"
+
+echo
+echo "------------------------------------------------------------"
+echo "LOG FILES"
+echo "------------------------------------------------------------"
+
+echo "Installation log : $LOG"
+echo "Error log        : $ERROR_LOG"
+
+echo
+echo -e "${GREEN}Installation finished.${NC}"
+echo -e "${YELLOW}Review $ERROR_LOG if any component failed.${NC}"
+echo
+
+# ============================================================
+# FINAL SERVICE CHECK
+# ============================================================
+
+echo "============================================================"
+echo "                 SERVICE STATUS"
+echo "============================================================"
+
+for service in xray trojan-go nginx chrony autosett; do
+    if systemctl list-unit-files "${service}.service" >/dev/null 2>&1; then
+        if systemctl is-active --quiet "$service"; then
+            echo -e "${GREEN}[RUNNING]${NC} $service"
+        else
+            echo -e "${YELLOW}[STOPPED]${NC} $service"
+        fi
+    fi
+done
+
+echo
+echo "============================================================"
+echo "                  MAHBOUB VPN READY"
+echo "============================================================"
