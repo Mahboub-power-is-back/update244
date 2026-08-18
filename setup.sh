@@ -1,360 +1,192 @@
 #!/bin/bash
-
 # ============================================================
-# MAHBOUB VPN - SETUP INSTALLER
-# Original installation flow preserved
-# Ubuntu / Debian compatible
+# MAHBOUB VPN - SETUP INSTALLER (MATCHED TO CORRECTED XRAY/SSH)
+#
+# Ubuntu / Debian
+#
+# IMPORTANT PORT OWNERSHIP
+#   80/443/8443  -> Xray/HAProxy/Nginx multiplexer
+#   /ssh         -> SSH WebSocket on 80/443/8443
+#   /ovpn-ws     -> OpenVPN WebSocket on 80/443/8443
+#   8880          -> SSH WebSocket backend
+#   2086          -> OpenVPN WebSocket backend
+#   2087          -> Trojan-Go
+#   89            -> legacy Nginx panel
+#
+# This setup intentionally DOES NOT run the old edu.sh websocket
+# installer because it can claim 443/8880 and undo the corrected
+# Xray + SSH WebSocket layout.
+#
+# Other VPN services are installed on their own ports/ranges.
 # ============================================================
 
-set +e
+set -Eeuo pipefail
+IFS=$'\n\t'
 
-# ============================================================
-# ROOT CHECK
-# ============================================================
-
-if [ "${EUID}" -ne 0 ]; then
-    echo "You need to run this script as root"
-    exit 1
-fi
+[ "${EUID}" -eq 0 ] || { echo "Run this script as root."; exit 1; }
 
 if command -v systemd-detect-virt >/dev/null 2>&1; then
-    VIRT=$(systemd-detect-virt 2>/dev/null)
-    if [ "$VIRT" = "openvz" ]; then
-        echo "OpenVZ is not supported"
-        exit 1
-    fi
+    VIRT="$(systemd-detect-virt 2>/dev/null || true)"
+    [ "$VIRT" = "openvz" ] && { echo "OpenVZ is not supported."; exit 1; }
 fi
 
-# ============================================================
-# COLORS
-# ============================================================
-
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-
-# ============================================================
-# LOGGING
-# ============================================================
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 LOG_DIR="/var/log/akbar-vpn"
 LOG_FILE="$LOG_DIR/install.log"
 ERROR_LOG="$LOG_DIR/error.log"
 
 mkdir -p "$LOG_DIR"
-
-touch "$LOG_FILE"
-touch "$ERROR_LOG"
-
+touch "$LOG_FILE" "$ERROR_LOG"
 chmod 600 "$LOG_FILE" "$ERROR_LOG"
 
 exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 
-START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+START_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
 
-echo
-echo "============================================================"
-echo "              AKBAR VPN INSTALLER"
-echo "============================================================"
-echo "Start Time : $START_TIME"
-echo "Log File   : $LOG_FILE"
-echo "Error Log  : $ERROR_LOG"
-echo "============================================================"
-echo
-
-# ============================================================
-# HOSTING LINKS
-# ============================================================
-
-akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ssh"
-akbarvpnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/sstp"
-akbarvpnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ssr"
-akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/shadowsocks"
-akbarvpnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/wireguard"
-akbarvpnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/xray"
-akbarvpnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ipsec"
-akbarvpnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/backup"
-akbarvpnnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/websocket"
-akbarvpnnnnnnnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main/ohp"
-
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
-
-section() {
+info(){ echo -e "${BLUE}[INFO]${NC} $*"; }
+ok(){ echo -e "${GREEN}[OK]${NC} $*"; }
+warn(){ echo -e "${YELLOW}[WARN]${NC} $*"; }
+die(){ echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+section(){
     echo
     echo "============================================================"
     echo "$1"
     echo "============================================================"
 }
 
-ok() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
-
-info() {
-    echo -e "${CYAN}[INFO]${NC} $1"
-}
-
-warn() {
-    echo -e "${ORANGE}[WARN]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# ============================================================
-# APT LOCK HANDLING
-# ============================================================
-
-wait_for_apt() {
-
-    info "Checking package manager..."
-
-    local timeout=300
-    local elapsed=0
-
-    while fuser \
-        /var/lib/dpkg/lock-frontend \
-        /var/lib/dpkg/lock \
-        /var/cache/apt/archives/lock \
-        >/dev/null 2>&1
-    do
-
-        if [ "$elapsed" -ge "$timeout" ]; then
-            error "APT/DPKG lock timeout."
-            return 1
-        fi
-
-        echo -ne "\r${ORANGE}[WAIT]${NC} Another package process is running... ${elapsed}s"
+wait_for_apt(){
+    local timeout=600 elapsed=0
+    while fuser /var/lib/dpkg/lock-frontend \
+              /var/lib/dpkg/lock \
+              /var/cache/apt/archives/lock >/dev/null 2>&1; do
+        [ "$elapsed" -ge "$timeout" ] && return 1
+        echo -ne "\r${YELLOW}[WAIT]${NC} APT/DPKG lock: ${elapsed}s"
         sleep 2
-
-        elapsed=$((elapsed + 2))
+        elapsed=$((elapsed+2))
     done
-
     echo
-    ok "Package manager ready"
-
     return 0
 }
 
-# ============================================================
-# PACKAGE INSTALLER
-# ============================================================
-
-install_packages() {
-
-    wait_for_apt || return 1
-
+install_packages(){
+    wait_for_apt || die "APT/DPKG lock timeout."
     export DEBIAN_FRONTEND=noninteractive
 
-    apt-get update -y
+    apt-get update -y || die "apt update failed."
 
-    wait_for_apt || return 1
+    wait_for_apt || die "APT/DPKG lock timeout."
 
     apt-get install -y \
-        wget \
-        curl \
-        ca-certificates \
-        gnupg \
-        gnupg2 \
-        lsb-release \
-        dnsutils \
-        unzip \
-        zip \
-        socat \
-        cron \
-        bash-completion \
-        screen \
-        iptables \
-        iptables-persistent \
-        netfilter-persistent \
-        openssl \
-        jq \
-        lsof \
-        psmisc \
-        tar \
-        gzip \
-        xz-utils \
-        chrony \
-        openssh-client
+        wget curl ca-certificates gnupg gnupg2 lsb-release \
+        dnsutils unzip zip socat cron bash-completion screen \
+        iptables iptables-persistent netfilter-persistent openssl jq \
+        lsof psmisc tar gzip xz-utils chrony openssh-client \
+        python3 python3-venv || die "Basic dependency installation failed."
 
-    if [ $? -ne 0 ]; then
-        error "Basic dependency installation failed."
+    systemctl enable --now chrony 2>/dev/null || true
+    timedatectl set-ntp true 2>/dev/null || true
+
+    ok "Dependencies installed."
+}
+
+download_script(){
+    local url="$1" file="$2"
+    info "Downloading $file"
+    rm -f "$file"
+    curl -fL --retry 3 --connect-timeout 15 --max-time 180 \
+        -o "$file" "https://$url" || {
+        error "Download failed: $url"
         return 1
-    fi
+    }
+    [ -s "$file" ] || { error "Empty download: $file"; return 1; }
+    chmod 700 "$file"
+    ok "Downloaded $file"
+}
 
-    # ntpdate was removed from newer Ubuntu/Debian.
-    # Use ntpsec-ntpdate when available.
-    if apt-cache show ntpdate >/dev/null 2>&1; then
-        apt-get install -y ntpdate
-    elif apt-cache show ntpsec-ntpdate >/dev/null 2>&1; then
-        apt-get install -y ntpsec-ntpdate
+run_script(){
+    local file="$1" name="$2"
+    [ -f "$file" ] || { warn "$file not found; skipping $name."; return 0; }
+    section "$name"
+    bash "$file"
+}
+
+run_screened(){
+    local file="$1" name="$2" session="$3" rcfile="$4"
+    [ -f "$file" ] || { warn "$file not found; skipping $name."; return 0; }
+
+    rm -f "$rcfile"
+    screen -S "$session" -X quit >/dev/null 2>&1 || true
+
+    screen -dmS "$session" bash -c \
+        "bash '$file' >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > '$rcfile'"
+
+    while [ ! -s "$rcfile" ]; do sleep 2; done
+    local rc
+    rc="$(cat "$rcfile")"
+    rm -f "$rcfile"
+
+    if [ "$rc" = "0" ]; then
+        ok "$name completed."
     else
-        warn "ntpdate package unavailable. Chrony will be used."
+        warn "$name returned exit code $rc. See $ERROR_LOG."
     fi
-
-    ok "Basic dependencies installed"
-
-    return 0
 }
 
 # ============================================================
-# SAFE DOWNLOAD
+# REPOSITORIES
 # ============================================================
 
-download_script() {
+BASE="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main"
 
-    local URL="$1"
-    local FILE="$2"
-
-    info "Downloading $FILE"
-
-    rm -f "$FILE"
-
-    if ! wget \
-        --timeout=30 \
-        --tries=3 \
-        --retry-connrefused \
-        -q \
-        -O "$FILE" \
-        "https://$URL"
-    then
-        error "Download failed: $URL"
-        return 1
-    fi
-
-    if [ ! -s "$FILE" ]; then
-        error "Downloaded file is empty: $FILE"
-        return 1
-    fi
-
-    chmod +x "$FILE"
-
-    ok "Downloaded $FILE"
-
-    return 0
-}
+SSH_PATH="$BASE/ssh"
+SSTP_PATH="$BASE/sstp"
+SSR_PATH="$BASE/ssr"
+SS_PATH="$BASE/shadowsocks"
+WG_PATH="$BASE/wireguard"
+XRAY_PATH="$BASE/xray"
+IPSEC_PATH="$BASE/ipsec"
+BACKUP_PATH="$BASE/backup"
+OHP_PATH="$BASE/ohp"
 
 # ============================================================
-# RUN SCRIPT
+# START
 # ============================================================
 
-run_script() {
-
-    local FILE="$1"
-    local NAME="$2"
-
-    if [ ! -f "$FILE" ]; then
-        error "$FILE does not exist"
-        return 1
-    fi
-
-    chmod +x "$FILE"
-
-    section "$NAME"
-
-    bash "$FILE"
-
-    local RC=$?
-
-    if [ "$RC" -eq 0 ]; then
-        ok "$NAME completed"
-    else
-        error "$NAME returned exit code $RC"
-    fi
-
-    return "$RC"
-}
-
-# ============================================================
-# VPS INFORMATION
-# ============================================================
+clear 2>/dev/null || true
+echo "============================================================"
+echo "              MAHBOUB VPN INSTALLER"
+echo "============================================================"
+echo "Start Time : $START_TIME"
+echo "Log File   : $LOG_FILE"
+echo "============================================================"
 
 section "VPS CHECK"
 
-MYIP=$(curl -4 -fsSL --max-time 15 https://ipinfo.io/ip 2>/dev/null)
-
-if [ -z "$MYIP" ]; then
-    MYIP=$(wget -qO- -T 15 https://ipinfo.io/ip 2>/dev/null)
-fi
-
+MYIP="$(curl -4 -fsSL --max-time 15 https://api.ipify.org 2>/dev/null || true)"
+[ -n "$MYIP" ] || MYIP="$(curl -4 -fsSL --max-time 15 https://ifconfig.me 2>/dev/null || true)"
 echo "Public IP : ${MYIP:-UNKNOWN}"
 
-if [ -z "$MYIP" ]; then
-    warn "Could not determine public IPv4 address."
-else
-    ok "VPS detected"
-fi
-
-# ============================================================
-# EXISTING INSTALLATION CHECK
-# ============================================================
-
-if [ -f "/etc/xray/domain" ]; then
-
-    warn "Xray domain file already exists."
-    echo
-    echo "Existing installation detected."
-    echo
-    echo "If you want to reinstall, remove the existing installation"
-    echo "only after making a backup."
-    echo
-    exit 0
-fi
-
-# ============================================================
-# CREATE DIRECTORIES
-# ============================================================
-
-section "PREPARING SYSTEM"
-
 mkdir -p /var/lib/akbarstorevpn
-mkdir -p /var/log/akbar-vpn
+printf 'IP=%s\n' "${MYIP:-UNKNOWN}" > /var/lib/akbarstorevpn/ipvps.conf
 
-cat > /var/lib/akbarstorevpn/ipvps.conf <<EOF
-IP=${MYIP}
-EOF
-
-ok "Directories prepared"
-
-# ============================================================
-# INSTALL DEPENDENCIES
-# ============================================================
-
-section "INSTALLING DEPENDENCIES"
-
+section "DEPENDENCIES"
 install_packages
 
-if [ $? -ne 0 ]; then
-    error "Failed to install dependencies."
-    echo
-    echo "See:"
-    echo "  $LOG_FILE"
-    echo "  $ERROR_LOG"
-    exit 1
-fi
-
 # ============================================================
-# CF / DOMAIN
+# DOMAIN / CLOUDFLARE
 # ============================================================
 
 section "DOMAIN / CLOUDFLARE"
 
-download_script "$akbarvpn/cf.sh" "/root/cf.sh"
+download_script "$SSH_PATH/cf.sh" /root/cf.sh || die "cf.sh download failed."
+run_script /root/cf.sh "Cloudflare / Domain Setup"
 
-if [ $? -eq 0 ]; then
-    run_script "/root/cf.sh" "Cloudflare / Domain Setup"
-else
-    error "cf.sh could not be downloaded."
-    exit 1
-fi
+[ -s /etc/xray/domain ] || die "/etc/xray/domain was not created by cf.sh."
+DOMAIN="$(head -n1 /etc/xray/domain | tr -d '[:space:]')"
+[ -n "$DOMAIN" ] || die "Domain is empty."
+ok "Domain: $DOMAIN"
 
 # ============================================================
 # XRAY
@@ -362,242 +194,74 @@ fi
 
 section "XRAY"
 
-download_script "$akbarvpnnnnnn/ins-xray.sh" "/root/ins-xray.sh"
+download_script "$XRAY_PATH/ins-xray.sh" /root/ins-xray.sh \
+    || die "Unable to download corrected ins-xray.sh."
 
-if [ $? -eq 0 ]; then
-
-    screen -S xray -X quit >/dev/null 2>&1 || true
-
-    screen -dmS xray bash -c \
-        "bash /root/ins-xray.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-xray.rc"
-
-    info "Xray installer started in screen session: xray"
-
-    while [ ! -f /tmp/akbar-xray.rc ]; do
-        sleep 2
-    done
-
-    XRAY_RC=$(cat /tmp/akbar-xray.rc)
-    rm -f /tmp/akbar-xray.rc
-
-    if [ "$XRAY_RC" = "0" ]; then
-        ok "Xray installation completed"
-    else
-        error "Xray installation failed with code $XRAY_RC"
-    fi
-
-else
-    error "Unable to download ins-xray.sh"
-    exit 1
-fi
+run_screened /root/ins-xray.sh \
+    "Corrected Xray installer" xray /tmp/akbar-xray.rc
 
 # ============================================================
-# SSH / OPENVPN
+# SSH / OPENVPN / WEBSOCKET
 # ============================================================
 
-section "SSH / OPENVPN"
+section "SSH / OPENVPN / WEBSOCKET"
 
-download_script "$akbarvpn/ssh-vpn.sh" "/root/ssh-vpn.sh"
+download_script "$SSH_PATH/ssh-vpn.sh" /root/ssh-vpn.sh \
+    || die "Unable to download corrected ssh-vpn.sh."
 
-if [ $? -eq 0 ]; then
-    screen -S ssh-vpn -X quit >/dev/null 2>&1 || true
-
-    screen -dmS ssh-vpn bash -c \
-        "bash /root/ssh-vpn.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-ssh.rc"
-
-    info "SSH/OpenVPN installer started."
-
-    while [ ! -f /tmp/akbar-ssh.rc ]; do
-        sleep 2
-    done
-
-    SSH_RC=$(cat /tmp/akbar-ssh.rc)
-    rm -f /tmp/akbar-ssh.rc
-
-    [ "$SSH_RC" = "0" ] && ok "SSH/OpenVPN completed" || error "SSH/OpenVPN failed"
-else
-    error "Unable to download ssh-vpn.sh"
-fi
+run_screened /root/ssh-vpn.sh \
+    "Corrected SSH/OpenVPN/WebSocket installer" ssh-vpn /tmp/akbar-ssh.rc
 
 # ============================================================
-# SSTP
+# OTHER SERVICES
 # ============================================================
+# These are deliberately installed after the corrected Xray/SSH
+# stack. Their scripts must use their documented dedicated ports.
+# None of the legacy websocket scripts are invoked here because
+# the corrected ssh-vpn.sh owns 8880/2086 and Xray owns 80/443/8443.
 
 section "SSTP"
-
-download_script "$akbarvpnn/sstp.sh" "/root/sstp.sh"
-
-if [ $? -eq 0 ]; then
-
-    screen -S sstp -X quit >/dev/null 2>&1 || true
-
-    screen -dmS sstp bash -c \
-        "bash /root/sstp.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-sstp.rc"
-
-    while [ ! -f /tmp/akbar-sstp.rc ]; do
-        sleep 2
-    done
-
-    SSTP_RC=$(cat /tmp/akbar-sstp.rc)
-    rm -f /tmp/akbar-sstp.rc
-
-    [ "$SSTP_RC" = "0" ] && ok "SSTP completed" || error "SSTP failed"
-else
-    error "Unable to download sstp.sh"
+if download_script "$SSTP_PATH/sstp.sh" /root/sstp.sh; then
+    run_screened /root/sstp.sh SSTP sstp /tmp/akbar-sstp.rc
 fi
-
-# ============================================================
-# SSR
-# ============================================================
 
 section "SHADOWSOCKS-R"
-
-download_script "$akbarvpnnn/ssr.sh" "/root/ssr.sh"
-
-if [ $? -eq 0 ]; then
-
-    screen -S ssr -X quit >/dev/null 2>&1 || true
-
-    screen -dmS ssr bash -c \
-        "bash /root/ssr.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-ssr.rc"
-
-    while [ ! -f /tmp/akbar-ssr.rc ]; do
-        sleep 2
-    done
-
-    SSR_RC=$(cat /tmp/akbar-ssr.rc)
-    rm -f /tmp/akbar-ssr.rc
-
-    [ "$SSR_RC" = "0" ] && ok "SSR completed" || error "SSR failed"
-else
-    error "Unable to download ssr.sh"
+if download_script "$SSR_PATH/ssr.sh" /root/ssr.sh; then
+    run_screened /root/ssr.sh "Shadowsocks-R" ssr /tmp/akbar-ssr.rc
 fi
-
-# ============================================================
-# SHADOWSOCKS
-# ============================================================
 
 section "SHADOWSOCKS"
-
-download_script "$akbarvpnnnn/sodosok.sh" "/root/sodosok.sh"
-
-if [ $? -eq 0 ]; then
-
-    screen -S ss -X quit >/dev/null 2>&1 || true
-
-    screen -dmS ss bash -c \
-        "bash /root/sodosok.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-ss.rc"
-
-    while [ ! -f /tmp/akbar-ss.rc ]; do
-        sleep 2
-    done
-
-    SS_RC=$(cat /tmp/akbar-ss.rc)
-    rm -f /tmp/akbar-ss.rc
-
-    [ "$SS_RC" = "0" ] && ok "Shadowsocks completed" || error "Shadowsocks failed"
-else
-    error "Unable to download sodosok.sh"
+if download_script "$SS_PATH/sodosok.sh" /root/sodosok.sh; then
+    run_screened /root/sodosok.sh Shadowsocks ss /tmp/akbar-ss.rc
 fi
-
-# ============================================================
-# WIREGUARD
-# ============================================================
 
 section "WIREGUARD"
-
-download_script "$akbarvpnnnnn/wg.sh" "/root/wg.sh"
-
-if [ $? -eq 0 ]; then
-
-    screen -S wg -X quit >/dev/null 2>&1 || true
-
-    screen -dmS wg bash -c \
-        "bash /root/wg.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-wg.rc"
-
-    while [ ! -f /tmp/akbar-wg.rc ]; do
-        sleep 2
-    done
-
-    WG_RC=$(cat /tmp/akbar-wg.rc)
-    rm -f /tmp/akbar-wg.rc
-
-    [ "$WG_RC" = "0" ] && ok "WireGuard completed" || error "WireGuard failed"
-else
-    error "Unable to download wg.sh"
+if download_script "$WG_PATH/wg.sh" /root/wg.sh; then
+    run_screened /root/wg.sh WireGuard wg /tmp/akbar-wg.rc
 fi
-
-# ============================================================
-# L2TP / IPSEC
-# ============================================================
 
 section "L2TP / IPSEC"
-
-download_script "$akbarvpnnnnnnn/ipsec.sh" "/root/ipsec.sh"
-
-if [ $? -eq 0 ]; then
-
-    screen -S ipsec -X quit >/dev/null 2>&1 || true
-
-    screen -dmS ipsec bash -c \
-        "bash /root/ipsec.sh >> '$LOG_FILE' 2>> '$ERROR_LOG'; echo \$? > /tmp/akbar-ipsec.rc"
-
-    while [ ! -f /tmp/akbar-ipsec.rc ]; do
-        sleep 2
-    done
-
-    IPSEC_RC=$(cat /tmp/akbar-ipsec.rc)
-    rm -f /tmp/akbar-ipsec.rc
-
-    [ "$IPSEC_RC" = "0" ] && ok "IPsec completed" || error "IPsec failed"
-else
-    error "Unable to download ipsec.sh"
+if download_script "$IPSEC_PATH/ipsec.sh" /root/ipsec.sh; then
+    run_screened /root/ipsec.sh "L2TP / IPSEC" ipsec /tmp/akbar-ipsec.rc
 fi
-
-# ============================================================
-# BACKUP / BRIDGE
-# ============================================================
 
 section "BACKUP / BRIDGE"
-
-download_script "$akbarvpnnnnnnnn/set-br.sh" "/root/set-br.sh"
-
-if [ $? -eq 0 ]; then
-    run_script "/root/set-br.sh" "Bridge / Backup Setup"
-else
-    error "Unable to download set-br.sh"
-fi
-
-# ============================================================
-# WEBSOCKET
-# ============================================================
-
-section "WEBSOCKET"
-
-download_script "$akbarvpnnnnnnnnn/edu.sh" "/root/edu.sh"
-
-if [ $? -eq 0 ]; then
-    run_script "/root/edu.sh" "WebSocket Setup"
-else
-    error "Unable to download edu.sh"
+if download_script "$BACKUP_PATH/set-br.sh" /root/set-br.sh; then
+    run_script /root/set-br.sh "Bridge / Backup Setup"
 fi
 
 # ============================================================
 # OHP
 # ============================================================
 
-section "OHP SERVER"
+section "OHP"
 
-download_script "$akbarvpnnnnnnnnnn/ohp.sh" "/root/ohp.sh"
-
-if [ $? -eq 0 ]; then
-    run_script "/root/ohp.sh" "OHP Server"
-else
-    error "Unable to download ohp.sh"
+if download_script "$OHP_PATH/ohp.sh" /root/ohp.sh; then
+    run_script /root/ohp.sh "OHP Server"
 fi
 
 # ============================================================
-# AUTO SETTING SERVICE
+# AUTOSSETT
 # ============================================================
 
 section "AUTO SETTING"
@@ -605,8 +269,8 @@ section "AUTO SETTING"
 cat > /etc/systemd/system/autosett.service <<'EOF'
 [Unit]
 Description=Akbar VPN Auto Setting
-Documentation=https://t.me/Akbar218
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -618,143 +282,127 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable autosett.service
+systemctl enable autosett.service >/dev/null 2>&1 || true
 
-wget -q \
-    --timeout=30 \
-    --tries=3 \
-    -O /etc/set.sh \
-    "https://${akbarvpn}/set.sh"
-
-if [ -s /etc/set.sh ]; then
-    chmod +x /etc/set.sh
-    ok "Auto setting installed"
+if download_script "$SSH_PATH/set.sh" /etc/set.sh; then
+    chmod 700 /etc/set.sh
+    ok "Auto setting installed."
 else
-    error "Unable to download /etc/set.sh"
+    warn "set.sh could not be downloaded."
 fi
 
 # ============================================================
-# CLEAN TEMPORARY INSTALLER FILES
+# IMPORTANT: DO NOT INSTALL OLD edu.sh
 # ============================================================
+# The old setup.sh downloaded edu.sh here. That websocket installer
+# can bind public 443/8880 and conflicts with the corrected stack.
+# WebSocket SSH/OVPN is already installed by ssh-vpn.sh.
 
-rm -f /root/ssh-vpn.sh
-rm -f /root/sstp.sh
-rm -f /root/wg.sh
-rm -f /root/ss.sh
-rm -f /root/sodosok.sh
-rm -f /root/ssr.sh
-rm -f /root/ins-xray.sh
-rm -f /root/ipsec.sh
-rm -f /root/set-br.sh
 rm -f /root/edu.sh
-rm -f /root/ohp.sh
-rm -f /root/cf.sh
 
 # ============================================================
-# VERSION
+# SERVICE NORMALIZATION
 # ============================================================
 
-echo "1.2" > /home/ver
+section "SERVICE NORMALIZATION"
+
+systemctl daemon-reload
+
+# Ensure corrected primary services are enabled.
+systemctl enable xray nginx 2>/dev/null || true
+systemctl enable ssh dropbear 2>/dev/null || true
+
+# Do not restart random legacy services blindly. Their installers
+# own their own configuration.
 
 # ============================================================
-# INSTALLATION SUMMARY
+# PORT COLLISION CHECK
 # ============================================================
 
-END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+section "PORT CHECK"
+
+echo "Primary listeners:"
+ss -lntup 2>/dev/null | grep -E \
+    ':(80|443|8443|8880|2086|2087|89|22|109|143|1194|2200|990|3128|7070|1701|1732|444)\b' \
+    || true
+
+echo
+echo "Expected primary layout:"
+echo "  80    -> HAProxy/Xray HTTP+Reality entry + SSH/OVPN WS paths"
+echo "  443   -> Xray Reality entry + SSH/OVPN WS paths"
+echo "  8443  -> Xray Reality entry + SSH/OVPN WS paths"
+echo "  8880  -> SSH WebSocket backend"
+echo "  2086  -> OpenVPN WebSocket backend"
+echo "  2087  -> Trojan-Go"
+echo
+
+# ============================================================
+# XRAY VALIDATION
+# ============================================================
+
+section "XRAY VALIDATION"
+
+if command -v xray >/dev/null 2>&1 && [ -f /etc/xray/config.json ]; then
+    if xray run -test -config /etc/xray/config.json; then
+        ok "Xray configuration test passed."
+    else
+        warn "Xray configuration test failed."
+    fi
+fi
+
+# ============================================================
+# SYSTEMD STATUS
+# ============================================================
+
+section "PRIMARY SERVICES"
+
+for svc in xray nginx ssh dropbear; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        echo "[ACTIVE] $svc"
+    else
+        echo "[NOT ACTIVE] $svc"
+    fi
+done
+
+# ============================================================
+# VERSION / SUMMARY
+# ============================================================
+
+mkdir -p /home
+echo "1.3" > /home/ver
+
+END_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
 
 section "INSTALLATION COMPLETE"
 
-echo
 echo "Start Time : $START_TIME"
 echo "End Time   : $END_TIME"
-echo
 echo "Public IP  : ${MYIP:-UNKNOWN}"
+echo "Domain     : $DOMAIN"
 echo
-echo "Installation Log : $LOG_FILE"
-echo "Error Log        : $ERROR_LOG"
+echo "Primary protocol stack:"
+echo "  Xray VLESS Reality     : 443 / 8443"
+echo "  HTTP/Web entry         : 80"
+echo "  VMess WS               : Xray backend"
+echo "  VLESS WS               : Xray backend"
+echo "  Trojan WS              : Xray backend"
+echo "  VLESS gRPC             : Xray backend"
+echo "  Trojan gRPC            : Xray backend"
+echo "  VLESS XHTTP            : Xray backend"
+echo "  SSH WebSocket          : /ssh on 80/443/8443 (backend 8880)"
+echo "  OpenVPN WebSocket      : /ovpn-ws on 80/443/8443 (backend 2086)"
+echo "  Trojan-Go              : 2087"
 echo
-
-echo "============================================================"
-echo "                  SERVICE & PORT"
-echo "============================================================"
-
-echo "OpenSSH                 : 443, 22"
-echo "OpenVPN                 : TCP 1194, UDP 2200, SSL 990"
-echo "Stunnel5                : 443, 445, 777"
-echo "Dropbear                : 443, 109, 143"
-echo "Squid Proxy             : 3128, 8080"
-echo "Badvpn                  : 7100, 7200, 7300"
-echo "Nginx                   : 89"
-echo "Wireguard               : 7070"
-echo "L2TP/IPSEC VPN          : 1701"
-echo "PPTP VPN                : 1732"
-echo "SSTP VPN                : 444"
-echo "Shadowsocks-R           : 1443-1543"
-echo "SS-OBFS TLS             : 2443-2543"
-echo "SS-OBFS HTTP            : 3443-3543"
-echo "XRAYS Vmess TLS         : 8443"
-echo "XRAYS Vmess None TLS    : 80"
-echo "XRAYS Vless TLS         : 8443"
-echo "XRAYS Vless None TLS    : 80"
-echo "XRAYS Trojan            : 8443"
-echo "Websocket TLS           : 443"
-echo "Websocket None TLS      : 8880"
-echo "Websocket OVPN          : 2086"
-echo "OHP SSH                 : 8181"
-echo "OHP Dropbear            : 8282"
-echo "OHP OpenVPN             : 8383"
-echo "Trojan-Go               : 2087"
-echo "UDP Custom              : 1-65535"
-
+echo "Legacy/other VPN services are kept on their dedicated ports."
+echo
+echo "Log       : $LOG_FILE"
+echo "Errors    : $ERROR_LOG"
 echo
 echo "============================================================"
-echo "               SERVER INFORMATION"
+echo "                 MAHBOUB VPN READY"
 echo "============================================================"
 
-echo "Timezone                : Asia/Jakarta"
-echo "Fail2Ban                : [ON]"
-echo "IPTables                : [ON]"
-echo "Auto-Reboot             : [ON]"
-echo "IPv6                    : [OFF]"
-echo "Autoreboot              : 05:00 GMT +7"
-echo "Autobackup Data"
-echo "Restore Data"
-echo "Auto Delete Expired Account"
-echo "Full Orders For Various Services"
-echo "White Label"
-
-echo
-echo "Installation Log --> $LOG_FILE"
-echo "Error Log        --> $ERROR_LOG"
-echo
-
-# ============================================================
-# FINISH
-# ============================================================
-
-echo "============================================================"
-echo "                 AKBAR VPN READY"
-echo "============================================================"
-echo
-
-ok "Installation process finished."
-
-echo
-echo "IMPORTANT:"
-echo "If any service failed, check:"
-echo
-echo "  tail -n 100 $ERROR_LOG"
-echo
-echo "Full installation log:"
-echo
-echo "  less $LOG_FILE"
-echo
-
-# Preserve original behavior
-echo "Reboot in 15 seconds..."
-
-sleep 15
-
-rm -f /root/setup.sh
-
-reboot
+# No automatic reboot here.
+# A reboot is intentionally left to the administrator so that
+# port/service problems can be inspected before restarting.
+exit 0
