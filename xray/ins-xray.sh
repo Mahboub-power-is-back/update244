@@ -4,9 +4,9 @@
 # Ubuntu / Debian
 #
 # Public entry points:
-#   80   HAProxy TCP mux: HTTP -> Nginx, TLS -> Xray Reality
-#   443  Xray VLESS Reality + TLS fallback
-#   8443 Xray VLESS Reality + TLS fallback
+#   80   HAProxy TCP mux: HTTP -> Nginx -> SSH/OVPN WS, TLS -> Xray Reality
+#   443  Xray Reality + WS fallbacks (SSH/OVPN)
+#   8443 Xray Reality + WS fallbacks (SSH/OVPN)
 #
 # Xray internal services:
 #   10001 VMess WS
@@ -348,6 +348,8 @@ cat > /etc/xray/config.json <<EOF
           {"path":"/trojan-grpc/","dest":10007},
           {"path":"/xhttp/","dest":10008},
           {"path":"/xhttp-http/","dest":10009},
+          {"path":"/ssh","dest":8880},
+          {"path":"/ovpn-ws","dest":2086},
           {"dest":8080}
         ]
       },
@@ -382,6 +384,8 @@ cat > /etc/xray/config.json <<EOF
           {"path":"/trojan-grpc/","dest":10007},
           {"path":"/xhttp/","dest":10008},
           {"path":"/xhttp-http/","dest":10009},
+          {"path":"/ssh","dest":8880},
+          {"path":"/ovpn-ws","dest":2086},
           {"dest":8080}
         ]
       },
