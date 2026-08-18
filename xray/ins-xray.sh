@@ -111,7 +111,7 @@ if [ ! -s /etc/xray/xray.crt ] || [ ! -s /etc/xray/xray.key ]; then
   /root/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
     --fullchain-file /etc/xray/xray.crt \
     --key-file /etc/xray/xray.key \
-    --reloadcmd "systemctl reload nginx" || die "Certificate install failed."
+    --reloadcmd "systemctl reload nginx 2>/dev/null || true" || die "Certificate install failed."
 fi
 chmod 600 /etc/xray/xray.key
 chmod 644 /etc/xray/xray.crt
