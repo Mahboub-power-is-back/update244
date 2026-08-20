@@ -13,9 +13,9 @@ LIGHT='\033[0;37m'
 MYIP=$(wget -qO- ipinfo.io/ip);
 clear
 domain=$(cat /etc/xray/domain)
-apt install iptables iptables-persistent -y
-apt install curl socat xz-utils wget apt-transport-https gnupg gnupg2 gnupg1 dnsutils lsb-release -y 
-apt install socat cron bash-completion ntpdate -y
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y iptables iptables-persistent curl socat xz-utils wget ca-certificates apt-transport-https gnupg dnsutils lsb-release cron bash-completion ntpdate unzip
 ntpdate pool.ntp.org
 apt -y install chrony
 timedatectl set-ntp true
@@ -164,44 +164,12 @@ cat > /etc/xray/config.json << END
     {"listen":"127.0.0.1","port":11030,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
 #MT-trojan-raw-none
 ]},"streamSettings":{"network":"raw","security":"none"}}
-    ,{"listen":"127.0.0.1","port":10085,"protocol":"dokodemo-door","settings":{"address":"127.0.0.1","port":10085,"network":"tcp"},"tag":"api"}
   ],
-  "api":{"tag":"api","services":["StatsService"]},
-  "outbounds":[{"protocol":"freedom","settings":{}},{"protocol":"freedom","settings":{},"tag":"api"},{"protocol":"blackhole","settings":{},"tag":"blocked"}],
-  "routing":{"rules":[{"type":"field","inboundTag":["api"],"outboundTag":"api"},{"type":"field","ip":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"outboundTag":"blocked"},{"type":"field","outboundTag":"blocked","protocol":["bittorrent"]}]},
+  "outbounds":[{"protocol":"freedom","settings":{}},{"protocol":"blackhole","settings":{},"tag":"blocked"}],
+  "routing":{"rules":[{"type":"field","ip":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"outboundTag":"blocked"},{"type":"field","outboundTag":"blocked","protocol":["bittorrent"]}]},
   "stats":{},"policy":{"levels":{"0":{"statsUserDownlink":true,"statsUserUplink":true}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true}}
 }
 END
-
-# MAHBOUB TUNNEL PREMIUM HELPERS
-PREMIUM_BASE="https://raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/main"
-mkdir -p /usr/local/share/mahboub/xray /usr/local/share/mahboub/trojango
-wget -q -O /usr/local/bin/xray-change-path "$PREMIUM_BASE/xray/change-path.sh" && chmod +x /usr/local/bin/xray-change-path
-wget -q -O /usr/local/bin/trojango-change-path "$PREMIUM_BASE/trojango/change-path.sh" && chmod +x /usr/local/bin/trojango-change-path
-wget -q -O /usr/local/bin/xray-quota-watch "$PREMIUM_BASE/xray/quota-watch.sh" && chmod +x /usr/local/bin/xray-quota-watch
-cat > /etc/systemd/system/xray-quota-watch.service <<'EOF'
-[Unit]
-Description=MAHBOUB TUNNEL PREMIUM Xray quota enforcement
-After=xray.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/xray-quota-watch
-EOF
-cat > /etc/systemd/system/xray-quota-watch.timer <<'EOF'
-[Unit]
-Description=Run Xray quota enforcement every minute
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=1min
-Unit=xray-quota-watch.service
-
-[Install]
-WantedBy=timers.target
-EOF
-systemctl daemon-reload
-systemctl enable --now xray-quota-watch.timer
 
 # / / Installation Xray Service
 cat > /etc/systemd/system/xray.service << END

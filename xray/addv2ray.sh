@@ -3,14 +3,10 @@ set -euo pipefail
 MYIP=$(wget -qO- ipinfo.io/ip || true)
 domain=$(cat /etc/xray/domain)
 CONFIG=/etc/xray/config.json
-PATHS=/etc/xray/paths.conf
-VMESS_WS_PATH=$(grep -E '^VMESS_WS_PATH=' "$PATHS" 2>/dev/null|cut -d= -f2- || echo /vmess/)
 read -rp "Username : " user
 [[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid value"; exit 1; }
 if grep -Fq '"'$user'"' "$CONFIG"; then echo "Account already exists"; exit 1; fi
 read -rp "Expired (Days) : " days
-read -rp "Usage quota (GB, 0=unlimited) : " quota_gb
-[[ "$quota_gb" =~ ^[0-9]+$ ]] || { echo "Quota must be a whole number"; exit 1; }
 hariini=$(date +%Y-%m-%d)
 exp=$(date -d "$days days" +%Y-%m-%d)
 uuid=$(cat /proc/sys/kernel/random/uuid)
@@ -18,10 +14,9 @@ for m in ws xhttp httpupgrade grpc raw; do
   sed -i "/^#MT-vmess-${m}-/a\,{\"id\":\"${uuid}\",\"alterId\":0}" "$CONFIG"
 done
 printf "%s %s %s\n" "$user" "$exp" "$uuid" >> /etc/xray/vmess-accounts.db
-printf "%s %s %s %s\n" "$user" "$exp" "$quota_gb" "$uuid" >> /etc/xray/quota-accounts.db
 systemctl restart xray.service
 enc() { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
-pws=$(enc "$VMESS_WS_PATH"); px=$(enc /vmess-xhttp/); ph=$(enc /vmess-httpupgrade/); pg=$(enc vmess-grpc)
+pws=$(enc /vmess/); px=$(enc /vmess-xhttp/); ph=$(enc /vmess-httpupgrade/); pg=$(enc vmess-grpc)
 vmess_link() {
   local port="$1" net="$2" tls="$3" path="$4"
   python3 - "$domain" "$port" "$uuid" "$user" "$net" "$tls" "$path" <<'PY2'
