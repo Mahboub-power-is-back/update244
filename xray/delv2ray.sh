@@ -19,5 +19,6 @@ s=re.sub(pat,'',s)
 open(p,'w').write(s)
 PY2
 sed -i "${n}d" "$DB"
+sed -i "\|^${user} |d" /etc/xray/quota-accounts.db 2>/dev/null || true
 systemctl restart xray.service
 echo "Deleted $user ($exp)"
