@@ -183,7 +183,7 @@ User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
-ExecStart=/usr/local/bin/xray -config /etc/xray/config.json
+ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 Restart=on-failure
 RestartPreventExitStatus=23
 
@@ -202,10 +202,15 @@ iptables-restore -t < /etc/iptables.up.rules
 netfilter-persistent save
 netfilter-persistent reload
 systemctl daemon-reload
-systemctl stop xray.service
-systemctl start xray.service
+if ! /usr/local/bin/xray run -test -config /etc/xray/config.json >/tmp/xray-config-test.log 2>&1; then
+  echo "Xray configuration test failed:" >&2
+  cat /tmp/xray-config-test.log >&2
+  exit 1
+fi
+systemctl stop xray.service || true
 systemctl enable xray.service
 systemctl restart xray.service
+systemctl --no-pager --full status xray.service || true
 
 # Install Trojan Go
 latest_version="$(curl -s "https://api.github.com/repos/p4gefau1t/trojan-go/releases" | grep tag_name | sed -E 's/.*"v(.*)".*/\1/' | head -n 1)"
