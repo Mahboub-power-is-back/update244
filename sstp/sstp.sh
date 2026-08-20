@@ -71,14 +71,20 @@ commonname=akbarstorevpn
 email=akbarssh21@gmail.com
 
 #install sstp
-apt-get install -y build-essential cmake gcc linux-headers-`uname -r` git libpcre3-dev libssl-dev liblua5.1-0-dev ppp
+apt-get update -y
+apt-get install -y build-essential cmake gcc g++ make git pkg-config libpcre2-dev libssl-dev liblua5.1-0-dev ppp
 git clone https://github.com/accel-ppp/accel-ppp.git /opt/accel-ppp-code
-mkdir /opt/accel-ppp-code/build
-cd /opt/accel-ppp-code/build/
-cmake -DBUILD_IPOE_DRIVER=TRUE -DBUILD_VLAN_MON_DRIVER=TRUE -DCMAKE_INSTALL_PREFIX=/usr -DKDIR=/usr/src/linux-headers-`uname -r` -DLUA=TRUE -DCPACK_TYPE=$yoi ..
-make
+mkdir -p /opt/accel-ppp-code/build
+cd /opt/accel-ppp-code
+# SSTP does not require the optional kernel IPOE/VLAN drivers. Disabling them
+# avoids hard dependency on cloud-provider-specific kernel headers.
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_IPOE_DRIVER=FALSE -DBUILD_VLAN_MON_DRIVER=FALSE -DCMAKE_INSTALL_PREFIX=/usr -DLUA=TRUE -DCPACK_TYPE=$yoi
+cmake --build build -j"$(nproc)"
+cd build
 cpack -G DEB
-dpkg -i accel-ppp.deb
+DEB="$(find . -maxdepth 1 -type f -name '*.deb' | head -n1)"
+[ -n "$DEB" ] || { echo "ERROR: Accel-PPP Debian package was not produced."; exit 1; }
+dpkg -i "$DEB"
 mv /etc/accel-ppp.conf.dist /etc/accel-ppp.conf
 wget -O /etc/accel-ppp.conf "https://${akbarvpn}/accel.conf"
 sed -i $MYIP2 /etc/accel-ppp.conf
