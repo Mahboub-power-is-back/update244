@@ -121,6 +121,8 @@ systemctl restart ws-tls
 # and routes by WebSocket path to private localhost backends.
 # ==========================================================
 mkdir -p /etc/nginx/conf.d
+wget -q -O /usr/local/bin/nginx-extra-port "https://${akbarvpn}/nginx-extra-port.sh"
+chmod +x /usr/local/bin/nginx-extra-port
 cat > /etc/nginx/conf.d/00-vpn-multiplex.conf <<'NGINX'
 map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 
