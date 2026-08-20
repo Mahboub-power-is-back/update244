@@ -1,69 +1,32 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-echo "Checking VPS"
-IZIN=$( curl https://raw.githubusercontent.com/senowahyu62/perizinan/main/ipvps.txt | grep $MYIP )
-if [ $MYIP = $MYIP ]; then
-echo -e "${NC}${GREEN}Permission Accepted...${NC}"
-else
-echo -e "${NC}${RED}Permission Denied!${NC}";
-echo -e "${NC}${LIGHT}Please Contact Admin!!"
-echo -e "${NC}${LIGHT}Facebook : https://m.facebook.com/lis.tio.718"
-echo -e "${NC}${LIGHT}WhatsApp : 081545854516"
-echo -e "${NC}${LIGHT}Telegram : https://t.me/Akbar218"
-exit 0
-fi
-clear
-source /var/lib/akbarstorevpn/ipvps.conf
-if [[ "$IP" = "" ]]; then
+set -euo pipefail
+MYIP=$(wget -qO- ipinfo.io/ip || true)
 domain=$(cat /etc/xray/domain)
-else
-domain=$IP
-fi
-tr="443"
-until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${user_EXISTS} == '0' ]]; do
-		read -rp "Password : " -e user
-		user_EXISTS=$(grep -w $user /etc/xray/config.json | wc -l)
-
-		if [[ ${user_EXISTS} == '1' ]]; then
-			echo ""
-			echo -e "Username ${RED}${user}${NC} Already On VPS Please Choose Another"
-			exit 1
-		fi
-	done
-read -p "Expired (Days) : " masaaktif
-hariini=`date -d "0 days" +"%Y-%m-%d"`
-exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
-sed -i '/#xray-trojan$/a\#&# '"$user $exp"'\
-},{"password": "'""$user""'","email": "'""$user""'"' /etc/xray/config.json
+CONFIG=/etc/xray/config.json
+read -rp "Password : " user
+[[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid value"; exit 1; }
+if grep -Fq '"'$user'"' "$CONFIG"; then echo "Account already exists"; exit 1; fi
+read -rp "Expired (Days) : " days
+hariini=$(date +%Y-%m-%d)
+exp=$(date -d "$days days" +%Y-%m-%d)
+uuid="$user"
+for m in ws xhttp httpupgrade grpc raw; do
+  sed -i "/^#MT-trojan-$m-/a\,{"password":"${user}","email":"${user}"}" "$CONFIG"
+done
+printf "%s %s %s\n" "$user" "$exp" "$user" >> /etc/xray/trojan-accounts.db
 systemctl restart xray.service
-trojanlink443="trojan://${user}@${domain}:443?security=tls&type=ws&path=%2Ftrojan%2F#${user}"
-trojanlink80="trojan://${user}@${domain}:80?security=tls&type=ws&path=%2Ftrojan%2F#${user}"
-service cron restart
-clear
-echo -e ""
-echo -e "======-XRAYS/TROJAN-======"
-echo -e "Remarks  : ${user}"
-echo -e "IP/Host  : ${MYIP}"
-echo -e "Address  : ${domain}"
-echo -e "Port     : 443, 80 (TLS/WS)"
-echo -e "Key      : ${user}"
-echo -e "Created  : $hariini"
-echo -e "Expired  : $exp"
-echo -e "=========================="
-echo -e "Link TR 443: ${trojanlink443}"
-echo -e "Link TR 80 : ${trojanlink80}"
-echo -e "=========================="
-echo -e "Script By Akbar Maulana"
+enc() { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+pws=$(enc /trojan/); px=$(enc /trojan-xhttp/); ph=$(enc /trojan-hu/); pg=$(enc trojan-grpc)
+if [ "trojan" = "trojan" ]; then base="trojan://${user}@${domain}"; else base="trojan://${uuid}@${domain}"; fi
+echo "===== TROJAN account ====="
+echo "Created: $hariini  Expired: $exp"
+echo "WS TLS    : $base:443?security=tls&type=ws&host=$domain&path=$pws&sni=$domain#$user"
+echo "WS NTLS   : $base:80?security=none&type=ws&host=$domain&path=$pws#$user"
+echo "XHTTP TLS : $base:443?security=tls&type=xhttp&host=$domain&path=$px&mode=auto&sni=$domain#$user"
+echo "XHTTP NTLS: $base:80?security=none&type=xhttp&host=$domain&path=$px&mode=auto#$user"
+echo "HU TLS    : $base:443?security=tls&type=httpupgrade&host=$domain&path=$ph&sni=$domain#$user"
+echo "HU NTLS   : $base:80?security=none&type=httpupgrade&host=$domain&path=$ph#$user"
+echo "gRPC TLS  : $base:443?security=tls&type=grpc&serviceName=$pg&sni=$domain#$user"
+echo "gRPC NTLS : $base:80?security=none&type=grpc&serviceName=$pg#$user"
+echo "TCP TLS   : $base:443?security=tls&type=tcp&sni=$domain#$user"
+echo "TCP NTLS  : $base:80?security=none&type=tcp#$user"

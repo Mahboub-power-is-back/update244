@@ -1,64 +1,23 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-echo "Checking VPS"
-IZIN=$( curl https://raw.githubusercontent.com/senowahyu62/perizinan/main/ipvps.txt | grep $MYIP )
-if [ $MYIP = $MYIP ]; then
-echo -e "${NC}${GREEN}Permission Accepted...${NC}"
-else
-echo -e "${NC}${RED}Permission Denied!${NC}";
-echo -e "${NC}${LIGHT}Please Contact Admin!!"
-echo -e "${NC}${LIGHT}Facebook : https://m.facebook.com/lis.tio.718"
-echo -e "${NC}${LIGHT}WhatsApp : 081545854516"
-echo -e "${NC}${LIGHT}Telegram : https://t.me/Akbar218"
-exit 0
-fi
-clear
-NUMBER_OF_CLIENTS=$(grep -c -E "^### " "/etc/xray/config.json")
-	if [[ ${NUMBER_OF_CLIENTS} == '0' ]]; then
-		echo ""
-		echo "You have no existing clients!"
-		exit 1
-	fi
-
-	clear
-	echo ""
-	echo " Select the existing client you want to remove"
-	echo " Press CTRL+C to return"
-	echo " ==============================="
-	echo "     No  Expired   User"
-	grep -E "^### " "/etc/xray/config.json" | cut -d ' ' -f 2-3 | nl -s ') '
-	until [[ ${CLIENT_NUMBER} -ge 1 && ${CLIENT_NUMBER} -le ${NUMBER_OF_CLIENTS} ]]; do
-		if [[ ${CLIENT_NUMBER} == '1' ]]; then
-			read -rp "Select one client [1]: " CLIENT_NUMBER
-		else
-			read -rp "Select one client [1-${NUMBER_OF_CLIENTS}]: " CLIENT_NUMBER
-		fi
-	done
-user=$(grep -E "^### " "/etc/xray/config.json" | cut -d ' ' -f 2 | sed -n "${CLIENT_NUMBER}"p)
-exp=$(grep -E "^### " "/etc/xray/config.json" | cut -d ' ' -f 3 | sed -n "${CLIENT_NUMBER}"p)
-sed -i "/^### $user $exp/,/^},{/d" /etc/xray/config.json
-sed -i "/^### $user $exp/,/^},{/d" /etc/xray/config.json
-rm -f /etc/xray/vmess-$user-tls.json /etc/xray/vmess-$user-nontls.json
+set -euo pipefail
+DB=/etc/xray/vmess-accounts.db
+CONFIG=/etc/xray/config.json
+[ -s "$DB" ] || { echo "No vmess accounts"; exit 1; }
+nl -w2 -s ') ' "$DB"
+read -rp "Select account number: " n
+line=$(sed -n "${n}p" "$DB")
+[ -n "$line" ] || exit 1
+user=$(awk '{print $1}' <<<"$line")
+exp=$(awk '{print $2}' <<<"$line")
+uuid=$(awk '{print $3}' <<<"$line")
+python3 - "$CONFIG" "$user" "$uuid" <<'PY2'
+import re,sys
+p,u,uid=sys.argv[1:]
+s=open(p).read()
+pat=r',\s*\{[^{}]*(?:"id"\s*:\s*"'+re.escape(uid)+r'"|"email"\s*:\s*"'+re.escape(u)+r'"|"password"\s*:\s*"'+re.escape(u)+r'")[^{}]*\}'
+s=re.sub(pat,'',s)
+open(p,'w').write(s)
+PY2
+sed -i "${n}d" "$DB"
 systemctl restart xray.service
-clear
-echo ""
-echo "==============================="
-echo "  XRAYS/Vmess Account Deleted  "
-echo "==============================="
-echo "Username  : $user"
-echo "Expired   : $exp"
-echo "==============================="
-echo "Script By Akbar Maulana"
+echo "Deleted $user ($exp)"

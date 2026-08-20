@@ -46,7 +46,8 @@ chmod +x /usr/local/bin/xray
 # Make Folder XRay
 mkdir -p /var/log/xray/
 
-sudo lsof -t -i tcp:80 -s tcp:listen | sudo xargs kill
+systemctl stop nginx 2>/dev/null || true
+systemctl stop xray.service 2>/dev/null || true
 cd /root/
 wget https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh
 bash acme.sh --install
@@ -71,125 +72,102 @@ path_key="/etc/xray/xray.key"
 # Buat Config Xray
 cat > /etc/xray/config.json << END
 {
-  "log": {
-    "access": "/var/log/xray/access.log",
-    "error": "/var/log/xray/error.log",
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "listen": "127.0.0.1",
-      "port": 10001,
-      "protocol": "vmess",
-      "settings": {
-        "clients": [
-          {
-            "id": "${uuid1}",
-            "alterId": 0
-#xray-vmess
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "ws",
-        "security": "none",
-        "wsSettings": {
-          "path": "/vmess/"
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    },
-    {
-      "listen": "127.0.0.1",
-      "port": 10002,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "${uuid2}",
-            "email": "default"
-#xray-vless
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "ws",
-        "security": "none",
-        "wsSettings": {
-          "path": "/vless/"
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    },
-    {
-      "listen": "127.0.0.1",
-      "port": 10003,
-      "protocol": "trojan",
-      "settings": {
-        "clients": [
-          {
-            "password": "${uuid3}",
-            "email": "default"
-#xray-trojan
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "ws",
-        "security": "none",
-        "wsSettings": {
-          "path": "/trojan/"
-        }
-      }
-    }
+  "log":{"access":"/var/log/xray/access.log","error":"/var/log/xray/error.log","loglevel":"info"},
+  "inbounds":[
+    {"listen":"127.0.0.1","port":11001,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-ws-tls
+]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vmess/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11002,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-ws-none
+]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vmess/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11003,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-xhttp-tls
+]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vmess-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11004,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-xhttp-none
+]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vmess-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11005,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-httpupgrade-tls
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11006,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-httpupgrade-none
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11007,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-grpc-tls
+]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vmess-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11008,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-grpc-none
+]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vmess-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11009,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-raw-tls
+]},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
+    {"listen":"127.0.0.1","port":11010,"protocol":"vmess","settings":{"clients":[{"id":"${uuid1}","alterId":0}
+#MT-vmess-raw-none
+]},"streamSettings":{"network":"raw","security":"none"}},
+    {"listen":"127.0.0.1","port":11011,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-ws-tls
+],"decryption":"none"},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vless/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11012,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-ws-none
+],"decryption":"none"},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vless/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11013,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-xhttp-tls
+],"decryption":"none"},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vless-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11014,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-xhttp-none
+],"decryption":"none"},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vless-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11015,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-httpupgrade-tls
+],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11016,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-httpupgrade-none
+],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11017,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-grpc-tls
+],"decryption":"none"},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vless-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11018,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-grpc-none
+],"decryption":"none"},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vless-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11019,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-raw-tls
+],"decryption":"none"},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
+    {"listen":"127.0.0.1","port":11020,"protocol":"vless","settings":{"clients":[{"id":"${uuid3}","email":""}
+#MT-vless-raw-none
+],"decryption":"none"},"streamSettings":{"network":"raw","security":"none"}},
+    {"listen":"127.0.0.1","port":11021,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-ws-tls
+]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/trojan/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11022,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-ws-none
+]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/trojan/","headers":{"Host":""}}}},
+    {"listen":"127.0.0.1","port":11023,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-xhttp-tls
+]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/trojan-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11024,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-xhttp-none
+]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/trojan-xhttp/","mode":"auto"}}},
+    {"listen":"127.0.0.1","port":11025,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-httpupgrade-tls
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11026,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-httpupgrade-none
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
+    {"listen":"127.0.0.1","port":11027,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-grpc-tls
+]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"trojan-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11028,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-grpc-none
+]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"trojan-grpc","multiMode":false}}},
+    {"listen":"127.0.0.1","port":11029,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-raw-tls
+]},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
+    {"listen":"127.0.0.1","port":11030,"protocol":"trojan","settings":{"clients":[{"password":"${uuid5}","email":""}
+#MT-trojan-raw-none
+]},"streamSettings":{"network":"raw","security":"none"}}
   ],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "settings": {}
-    },
-    {
-      "protocol": "blackhole",
-      "settings": {},
-      "tag": "blocked"
-    }
-  ],
-  "routing": {
-    "rules": [
-      {
-        "type": "field",
-        "ip": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
-        ],
-        "outboundTag": "blocked"
-      },
-      {
-        "type": "field",
-        "outboundTag": "blocked",
-        "protocol": ["bittorrent"]
-      }
-    ]
-  }
+  "outbounds":[{"protocol":"freedom","settings":{}},{"protocol":"blackhole","settings":{},"tag":"blocked"}],
+  "routing":{"rules":[{"type":"field","ip":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"outboundTag":"blocked"},{"type":"field","outboundTag":"blocked","protocol":["bittorrent"]}]},
+  "stats":{},"policy":{"levels":{"0":{"statsUserDownlink":true,"statsUserUplink":true}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true}}
 }
 END
 
@@ -215,9 +193,9 @@ END
 
 
 # // Enable & Start Service
-# Public ports 80/443 are owned by Nginx. Xray backends are loopback-only.
+# Accept port Xray
 for p in 80 443; do
-  iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$p" -j ACCEPT
+  iptables -C INPUT -m state --state NEW -m tcp -p tcp --dport "$p" -j ACCEPT 2>/dev/null ||     iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$p" -j ACCEPT
 done
 iptables-save > /etc/iptables.up.rules
 iptables-restore -t < /etc/iptables.up.rules
@@ -248,19 +226,20 @@ cat > /etc/trojan-go/config.json << END
 {
   "run_type": "server",
   "local_addr": "127.0.0.1",
-  "local_port": 10004,
+  "local_port": 10087,
   "remote_addr": "127.0.0.1",
   "remote_port": 89,
   "log_level": 1,
   "log_file": "/var/log/trojan-go/trojan-go.log",
   "password": [
-      "$uuid6"
+      "$uuid"
   ],
   "disable_http_check": true,
   "udp_timeout": 60,
   "ssl": {
     "verify": false,
     "verify_hostname": false,
+    "enabled": false,
     "cert": "/etc/xray/xray.crt",
     "key": "/etc/xray/xray.key",
     "key_password": "",
@@ -330,10 +309,11 @@ END
 
 # Trojan Go Uuid
 cat > /etc/trojan-go/uuid.txt << END
-$uuid6
+$uuid
 END
 
 # restart
+# Trojan-Go is reached through the 80/443 nginx multiplex frontend; keep its backend private.
 iptables-save > /etc/iptables.up.rules
 iptables-restore -t < /etc/iptables.up.rules
 netfilter-persistent save

@@ -1,93 +1,51 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-clear
+set -euo pipefail
+MYIP=$(wget -qO- ipinfo.io/ip || true)
 domain=$(cat /etc/xray/domain)
-tls="443"
-nontls="80"
-until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${CLIENT_EXISTS} == '0' ]]; do
-		read -rp "Username : " -e user
-		CLIENT_EXISTS=$(grep -w $user /etc/xray/config.json | wc -l)
-
-		if [[ ${CLIENT_EXISTS} == '1' ]]; then
-			echo ""
-			echo -e "Username ${RED}${CLIENT_NAME}${NC} Already On VPS Please Choose Another"
-			exit 1
-		fi
-	done
+CONFIG=/etc/xray/config.json
+read -rp "Username : " user
+[[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Invalid value"; exit 1; }
+if grep -Fq '"'$user'"' "$CONFIG"; then echo "Account already exists"; exit 1; fi
+read -rp "Expired (Days) : " days
+hariini=$(date +%Y-%m-%d)
+exp=$(date -d "$days days" +%Y-%m-%d)
 uuid=$(cat /proc/sys/kernel/random/uuid)
-read -p "Expired (Days) : " masaaktif
-hariini=`date -d "0 days" +"%Y-%m-%d"`
-exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
-sed -i '/#xray-vmess$/a\### '"$user $exp"'\
-},{"id": "'""$uuid""'","email": "'""$user""'"' /etc/xray/config.json
-cat>/etc/xray/vmess-$user-tls.json<<EOF
-      {
-      "v": "2",
-      "ps": "${user}",
-      "add": "${domain}",
-      "port": "${tls}",
-      "id": "${uuid}",
-      "aid": "0",
-      "net": "ws",
-      "path": "/vmess/",
-      "type": "none",
-      "host": "",
-      "tls": "tls"
-}
-EOF
-cat>/etc/xray/vmess-$user-nontls.json<<EOF
-      {
-      "v": "2",
-      "ps": "${user}",
-      "add": "${domain}",
-      "port": "${nontls}",
-      "id": "${uuid}",
-      "aid": "0",
-      "net": "ws",
-      "path": "/vmess/",
-      "type": "none",
-      "host": "",
-      "tls": "tls"
-}
-EOF
-vmess_base641=$( base64 -w 0 <<< $vmess_json1)
-vmess_base642=$( base64 -w 0 <<< $vmess_json2)
-xrayv2ray1="vmess://$(base64 -w 0 /etc/xray/vmess-$user-tls.json)"
-xrayv2ray2="vmess://$(base64 -w 0 /etc/xray/vmess-$user-nontls.json)"
-rm -rf /etc/xray/vmess-$user-tls.json
-rm -rf /etc/xray/vmess-$user-nontls.json
+for m in ws xhttp httpupgrade grpc raw; do
+  sed -i "/^#MT-vmess-$m-/a\,{"id":"${uuid}","alterId":0}" "$CONFIG"
+done
+printf "%s %s %s\n" "$user" "$exp" "$uuid" >> /etc/xray/vmess-accounts.db
 systemctl restart xray.service
-service cron restart
-clear
-echo -e ""
-echo -e "======-XRAYS/VMESS-======"
-echo -e "Remarks     : ${user}"
-echo -e "IP/Host     : ${MYIP}"
-echo -e "Address     : ${domain}"
-echo -e "Port TLS    : ${tls}"
-echo -e "Port No TLS : ${nontls}"
-echo -e "User ID     : ${uuid}"
-echo -e "Alter ID    : 0"
-echo -e "Security    : auto"
-echo -e "Network     : ws"
-echo -e "Path        : /vmess/"
-echo -e "Created     : $hariini"
-echo -e "Expired     : $exp"
-echo -e "========================="
-echo -e "Link TLS    : ${xrayv2ray1}"
-echo -e "========================="
-echo -e "Link No TLS : ${xrayv2ray2}"
-echo -e "========================="
+enc() { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+pws=$(enc /vmess/); px=$(enc /vmess-xhttp/); ph=$(enc /vmess-httpupgrade/); pg=$(enc vmess-grpc)
+vmess_link() {
+  local port="$1" net="$2" tls="$3" path="$4"
+  python3 - "$domain" "$port" "$uuid" "$user" "$net" "$tls" "$path" <<'PY2'
+import base64,json,sys
+host,port,uid,remark,net,tls,path=sys.argv[1:]
+o={"v":"2","ps":remark,"add":host,"port":port,"id":uid,"aid":"0","scy":"auto","net":net,"type":"none","host":host,"path":path,"tls":tls}
+if net=='grpc': o["path"]=path
+print('vmess://'+base64.b64encode(json.dumps(o,separators=(',',':')).encode()).decode())
+PY2
+}
+L_WS_TLS=$(vmess_link 443 ws tls /vmess/)
+L_WS_NONE=$(vmess_link 80 ws none /vmess/)
+L_X_TLS=$(vmess_link 443 xhttp tls /vmess-xhttp/)
+L_X_NONE=$(vmess_link 80 xhttp none /vmess-xhttp/)
+L_H_TLS=$(vmess_link 443 httpupgrade tls /vmess-httpupgrade/)
+L_H_NONE=$(vmess_link 80 httpupgrade none /vmess-httpupgrade/)
+L_G_TLS=$(vmess_link 443 grpc tls vmess-grpc)
+L_G_NONE=$(vmess_link 80 grpc none vmess-grpc)
+L_T_TLS=$(vmess_link 443 tcp tls /)
+L_T_NONE=$(vmess_link 80 tcp none /)
+echo "===== VMESS account ====="
+echo "Created: $hariini  Expired: $exp"
+echo "WS TLS    : $L_WS_TLS"
+echo "WS NTLS   : $L_WS_NONE"
+echo "XHTTP TLS : $L_X_TLS"
+echo "XHTTP NTLS: $L_X_NONE"
+echo "HU TLS    : $L_H_TLS"
+echo "HU NTLS   : $L_H_NONE"
+echo "gRPC TLS  : $L_G_TLS"
+echo "gRPC NTLS : $L_G_NONE"
+echo "TCP TLS   : $L_T_TLS"
+echo "TCP NTLS  : $L_T_NONE"
