@@ -1,79 +1,68 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-echo "Checking VPS"
-IZIN=$( curl https://raw.githubusercontent.com/senowahyu62/perizinan/main/ipvps.txt | grep $MYIP )
-if [ $MYIP = $MYIP ]; then
-echo -e "${NC}${GREEN}Permission Accepted...${NC}"
-else
-echo -e "${NC}${RED}Permission Denied!${NC}";
-echo -e "${NC}${LIGHT}Please Contact Admin!!"
-echo -e "${NC}${LIGHT}Facebook : https://m.facebook.com/lis.tio.718"
-echo -e "${NC}${LIGHT}WhatsApp : 081545854516"
-echo -e "${NC}${LIGHT}Telegram : https://t.me/Akbar218"
-exit 0
-fi
-clear
-Green_font_prefix="\033[32m" && Red_font_prefix="\033[31m" && Green_background_prefix="\033[42;37m" && Red_background_prefix="\033[41;37m" && Font_color_suffix="\033[0m"
-Info="${Green_font_prefix}[ON]${Font_color_suffix}"
-Error="${Red_font_prefix}[OFF]${Font_color_suffix}"
-cek=$(cat /home/limit)
-NIC=$(ip -o $ANU -4 route show to default | awk '{print $5}');
-function start () {
-echo -e "Limit Speed All Service"
-read -p "Set maximum download rate (in Kbps): " down
-read -p "Set maximum upload rate (in Kbps): " up
-if [[ -z "$down" ]] && [[ -z "$up" ]]; then
-echo > /dev/null 2>&1
-else
-echo "Start Configuration"
-sleep 0.5
-wondershaper -a $NIC -d $down -u $up > /dev/null 2>&1
-systemctl enable --now wondershaper.service
-echo "start" > /home/limit
-echo "Done"
-fi
+set -u
+
+RED=$'\033[38;5;203m'; GREEN=$'\033[38;5;46m'; YELLOW=$'\033[38;5;226m'; CYAN=$'\033[38;5;51m'; RESET=$'\033[0m'
+
+get_nic() {
+    ip -o -4 route show to default 2>/dev/null | awk 'NR==1 {print $5}'
 }
-function stop () {
-wondershaper -ca $NIC
-systemctl stop wondershaper.service
-echo "Stop Configuration"
-sleep 0.5
-echo > /home/limit
-echo "Done"
-}
-if [[ "$cek" = "start" ]]; then
-sts="${Info}"
-else
-sts="${Error}"
-fi
-clear
-echo -e "=================================="
-echo -e "    Limit Bandwidth Speed $sts    "
-echo -e "=================================="
-echo -e "[1]. Start Limit"
-echo -e "[2]. Stop Limit"
-echo -e "==============================="
-read -rp "Please Enter The Correct Number : " -e num
-if [[ "$num" = "1" ]]; then
-start
-elif [[ "$num" = "2" ]]; then
-stop
-else
-clear
-echo " You Entered The Wrong Number"
-menu
+
+NIC="$(get_nic)"
+if [ -z "$NIC" ]; then
+    echo "Unable to detect the default network interface."
+    exit 1
 fi
 
+if ! command -v wondershaper >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y >/dev/null 2>&1 || true
+    apt-get install -y wondershaper >/dev/null 2>&1 || true
+fi
+
+if ! command -v wondershaper >/dev/null 2>&1; then
+    echo -e "${RED}wondershaper is not installed and could not be installed.${RESET}"
+    exit 1
+fi
+
+state="$(cat /home/limit 2>/dev/null || true)"
+clear 2>/dev/null || true
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${RESET}"
+echo -e "${CYAN}║              MAHBOUB SERVER BANDWIDTH LIMIT                ║${RESET}"
+echo -e "${CYAN}╠══════════════════════════════════════════════════════════════╣${RESET}"
+echo -e "${CYAN}║${RESET} Interface : ${GREEN}${NIC}${RESET}"
+echo -e "${CYAN}║${RESET} Current   : ${YELLOW}${state:-OFF}${RESET}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${RESET}"
+echo
+printf '[1] Start / change limit\n[2] Stop limit\n[3] Back\n\nChoose: '
+read -r num
+
+case "$num" in
+1)
+    read -rp 'Maximum download rate (Kbps): ' down
+    read -rp 'Maximum upload rate (Kbps): ' up
+    [[ "$down" =~ ^[0-9]+$ && "$up" =~ ^[0-9]+$ && "$down" -gt 0 && "$up" -gt 0 ]] || {
+        echo -e "${RED}Enter positive numeric Kbps values.${RESET}"; exit 1;
+    }
+    wondershaper -c -a "$NIC" >/dev/null 2>&1 || true
+    if wondershaper -a "$NIC" -d "$down" -u "$up"; then
+        printf '%s\n' start > /home/limit
+        echo -e "${GREEN}Server bandwidth limit applied.${RESET}"
+        echo "Download: ${down} Kbps | Upload: ${up} Kbps"
+    else
+        echo -e "${RED}Failed to apply bandwidth limit.${RESET}"
+        exit 1
+    fi
+    ;;
+2)
+    wondershaper -c -a "$NIC" >/dev/null 2>&1 || true
+    : > /home/limit
+    echo -e "${GREEN}Server bandwidth limit removed.${RESET}"
+    ;;
+3)
+    exit 0
+    ;;
+*)
+    echo -e "${RED}Invalid option.${RESET}"
+    exit 1
+    ;;
+esac

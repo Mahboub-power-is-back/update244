@@ -19,11 +19,15 @@ akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/refs/heads/m
 apt install rclone -y
 printf "q\n" | rclone config
 wget -O /root/.config/rclone/rclone.conf "https://${akbarvpn}/rclone.conf"
-git clone  https://github.com/magnific0/wondershaper.git
-cd wondershaper
-make install
-cd
-rm -rf wondershaper
+if ! command -v wondershaper >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y wondershaper || true
+fi
+if ! command -v wondershaper >/dev/null 2>&1; then
+  git clone https://github.com/magnific0/wondershaper.git /tmp/wondershaper
+  make -C /tmp/wondershaper install
+  rm -rf /tmp/wondershaper
+fi
 echo > /home/limit
 apt install msmtp-mta ca-certificates bsd-mailx -y
 cat<<EOF>>/etc/msmtprc
