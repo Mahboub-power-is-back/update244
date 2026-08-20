@@ -19,8 +19,7 @@ apt-get install -y iptables iptables-persistent curl socat xz-utils wget ca-cert
 ntpdate pool.ntp.org
 apt -y install chrony
 timedatectl set-ntp true
-systemctl enable chronyd && systemctl restart chronyd
-systemctl enable chrony && systemctl restart chrony
+systemctl enable --now chrony 2>/dev/null || systemctl enable --now chronyd 2>/dev/null || true
 timedatectl set-timezone Asia/Jakarta
 chronyc sourcestats -v
 chronyc tracking -v
@@ -53,9 +52,17 @@ wget https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh
 bash acme.sh --install
 rm acme.sh
 cd .acme.sh
-bash acme.sh --register-account -m senowahyu62@gmail.com
-bash acme.sh --issue --standalone -d $domain --force
-bash acme.sh --installcert -d $domain --fullchainpath /etc/xray/xray.crt --keypath /etc/xray/xray.key
+bash acme.sh --register-account -m senowahyu62@gmail.com || true
+if ! bash acme.sh --issue --standalone -d "$domain" --force; then
+  echo "ERROR: ACME certificate issuance failed for $domain." >&2
+  exit 1
+fi
+if ! bash acme.sh --installcert -d "$domain" --fullchainpath /etc/xray/xray.crt --keypath /etc/xray/xray.key; then
+  echo "ERROR: ACME certificate installation failed." >&2
+  exit 1
+fi
+chmod 600 /etc/xray/xray.key
+chmod 644 /etc/xray/xray.crt
 
 service squid start
 uuid1=$(cat /proc/sys/kernel/random/uuid)
@@ -237,7 +244,7 @@ cat > /etc/trojan-go/config.json << END
   "log_level": 1,
   "log_file": "/var/log/trojan-go/trojan-go.log",
   "password": [
-      "$uuid"
+      "$uuid6"
   ],
   "disable_http_check": true,
   "udp_timeout": 60,
@@ -314,7 +321,7 @@ END
 
 # Trojan Go Uuid
 cat > /etc/trojan-go/uuid.txt << END
-$uuid
+$uuid6
 END
 
 # restart
