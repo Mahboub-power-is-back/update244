@@ -11,7 +11,7 @@ hariini=$(date +%Y-%m-%d)
 exp=$(date -d "$days days" +%Y-%m-%d)
 uuid=$(cat /proc/sys/kernel/random/uuid)
 for m in ws xhttp httpupgrade grpc raw; do
-  sed -i "/^#MT-vmess-$m-/a\,{"id":"${uuid}","alterId":0}" "$CONFIG"
+  sed -i "/^#MT-vmess-${m}-/a\,{\"id\":\"${uuid}\",\"alterId\":0}" "$CONFIG"
 done
 printf "%s %s %s\n" "$user" "$exp" "$uuid" >> /etc/xray/vmess-accounts.db
 systemctl restart xray.service

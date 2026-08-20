@@ -11,7 +11,7 @@ hariini=$(date +%Y-%m-%d)
 exp=$(date -d "$days days" +%Y-%m-%d)
 uuid="$user"
 for m in ws xhttp httpupgrade grpc raw; do
-  sed -i "/^#MT-trojan-$m-/a\,{"password":"${user}","email":"${user}"}" "$CONFIG"
+  sed -i "/^#MT-trojan-${m}-/a\,{\"password\":\"${user}\",\"email\":\"${user}\"}" "$CONFIG"
 done
 printf "%s %s %s\n" "$user" "$exp" "$user" >> /etc/xray/trojan-accounts.db
 systemctl restart xray.service
