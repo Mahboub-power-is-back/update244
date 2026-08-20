@@ -1,69 +1,39 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
-# Getting
-MYIP=$(wget -qO- ipinfo.io/ip);
-echo "Checking VPS"
-IZIN=$( curl https://raw.githubusercontent.com/senowahyu62/perizinan/main/ipvps.txt | grep $MYIP )
-if [ $MYIP = $MYIP ]; then
-echo -e "${NC}${GREEN}Permission Accepted...${NC}"
-else
-echo -e "${NC}${RED}Permission Denied!${NC}";
-echo -e "${NC}${LIGHT}Please Contact Admin!!"
-echo -e "${NC}${LIGHT}Facebook : https://m.facebook.com/lis.tio.718"
-echo -e "${NC}${LIGHT}WhatsApp : 081545854516"
-echo -e "${NC}${LIGHT}Telegram : https://t.me/Akbar218"
-exit 0
-fi
-clear
-uuid=$(cat /etc/trojan-go/uuid.txt)
-source /var/lib/akbarstorevpn/ipvps.conf
-if [[ "$IP" = "" ]]; then
-domain=$(cat /etc/xray/domain)
-else
-domain=$IP
-fi
-trgo="$(cat ~/log-install.txt | grep -w "Tr Go" | cut -d: -f2|sed 's/ //g')"
-until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${user_EXISTS} == '0' ]]; do
-		read -rp "Password : " -e user
-		user_EXISTS=$(grep -w $user /etc/trojan-go/akun.conf | wc -l)
-
-		if [[ ${user_EXISTS} == '1' ]]; then
-			echo ""
-			echo -e "Username ${RED}${user}${NC} Already On VPS Please Choose Another"
-			exit 1
-		fi
-	done
-read -p "Expired (Days) : " masaaktif
-sed -i '/"'""$uuid""'"$/a\,"'""$user""'"' /etc/trojan-go/config.json
-exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
-hariini=`date -d "0 days" +"%Y-%m-%d"`
-echo -e "### $user $exp" >> /etc/trojan-go/akun.conf
-systemctl restart trojan-go.service
-link="trojan-go://${user}@${domain}:${trgo}/?sni=${domain}&type=ws&host=${domain}&path=/trojango&encryption=none#$user"
-clear
-echo -e ""
-echo -e "=======-TROJAN-GO-======="
-echo -e "Remarks    : ${user}"
-echo -e "IP/Host    : ${MYIP}"
-echo -e "Address    : ${domain}"
-echo -e "Port       : ${trgo}"
-echo -e "Key        : ${user}"
-echo -e "Encryption : none"
-echo -e "Path       : /trojango"
-echo -e "Created    : $hariini"
-echo -e "Expired    : $exp"
-echo -e "========================="
-echo -e "Link TrGo  : ${link}"
-echo -e "========================="
-echo -e "Script By Akbar Maulana"
+set -euo pipefail
+CONFIG=/etc/trojan-go/config.json; AKUN=/etc/trojan-go/akun.conf
+[ -s "$CONFIG" ] || { echo 'Trojan-Go configuration is missing'; exit 1; }; mkdir -p /etc/trojan-go; touch "$AKUN"
+domain=$(tr -d '[:space:]' </etc/xray/domain 2>/dev/null || true); [ -n "$domain" ] || domain=$(wget -qO- ipinfo.io/ip)
+path=$(python3 - "$CONFIG" <<'PY'
+import json,sys; print(json.load(open(sys.argv[1])).get('websocket',{}).get('path','/trojango'))
+PY
+)
+while :; do read -rp 'Password : ' user; [[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo 'Invalid password'; continue; }; grep -qE "^### ${user} " "$AKUN" && { echo 'User exists'; continue; }; break; done
+read -rp 'Expired (Days) : ' days; [[ "$days" =~ ^[0-9]+$ ]] || exit 1
+exp=$(date -d "+$days days" +%Y-%m-%d); today=$(date +%Y-%m-%d)
+python3 - "$CONFIG" "$user" <<'PY'
+import json,sys,tempfile,os
+p,u=sys.argv[1:]; d=json.load(open(p)); a=d.setdefault('password',[])
+if not isinstance(a,list): raise SystemExit('password must be an array')
+if u not in a:a.append(u)
+fd,tmp=tempfile.mkstemp(prefix='.trgo.',dir=os.path.dirname(p))
+with os.fdopen(fd,'w') as f:json.dump(d,f,indent=2);f.write('\n')
+os.replace(tmp,p)
+PY
+printf '### %s %s\n' "$user" "$exp" >> "$AKUN"
+if ! systemctl restart trojan-go.service; then sed -i "\|^### ${user} ${exp}$|d" "$AKUN"; echo 'Restart failed; rolled back.'; exit 1; fi
+enc(){ python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+h=$(enc "$domain"); p=$(enc "$path"); r=$(enc "$user")
+link443="trojan-go://${user}@${domain}:443/?sni=${h}&type=ws&host=${h}&path=${p}&encryption=none#${r}"
+link80="trojan-go://${user}@${domain}:80/?type=ws&host=${h}&path=${p}&encryption=none#${r}"
+clear; cat <<EOF
+================ MAHBOUB TUNNEL PREMIUM ================
+Trojan-Go: $user
+Address : $domain
+Path    : $path
+Created : $today
+Expired : $exp
+----------------------------------------------------------
+Link 443: $link443
+Link 80 : $link80
+==========================================================
+EOF
