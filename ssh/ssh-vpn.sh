@@ -438,6 +438,7 @@ wget -O renewtrgo "https://${akbarvpnnn}/renewtrgo.sh"
 wget -O cektrgo "https://${akbarvpnnn}/cektrgo.sh"
 wget -O portsshnontls "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshnontls.sh"
 wget -O portsshws "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshws.sh"
+wget -O nginx-extra-port "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/nginx-extra-port.sh"
 
 wget -O sshovpnmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sshovpn.sh"
 wget -O l2tpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/l2tpmenu.sh"
@@ -455,6 +456,7 @@ wget -O setmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update2
 
 chmod +x portsshnontls
 chmod +x portsshws
+chmod +x nginx-extra-port
 
 chmod +x sshovpnmenu
 chmod +x l2tpmenu

@@ -291,6 +291,9 @@ info
 60)
 about
 ;;
+61)
+/usr/local/bin/xray-change-path || true
+;;
 *)
 clear
 menu
