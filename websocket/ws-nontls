@@ -96,10 +96,7 @@ class ConnectionHandler(threading.Thread):
     def run(self):
         try:
             self.client_buffer = self.client.recv(BUFLEN)
-            hostPort = self.findHeader(self.client_buffer, 'X-Real-Host')
-            # nginx supplies this header; fall back safely if it is absent.
-            if hostPort == '':
-                hostPort = DEFAULT_HOST
+            hostPort = DEFAULT_HOST
             passwd = self.findHeader(self.client_buffer, 'X-Pass')
             if len(PASS) != 0 and passwd != PASS:
                 self.client.send(b'HTTP/1.1 400 WrongPass!\r\n\r\n')

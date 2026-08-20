@@ -99,7 +99,7 @@ class ConnectionHandler(threading.Thread):
     def run(self):
         try:
             self.client_buffer = self.client.recv(BUFLEN)
-            hostPort = self.findHeader(self.client_buffer, b'X-Real-Host')
+            hostPort = DEFAULT_HOST
 
             # nginx supplies this header; fall back safely if a client/proxy omits it.
             if not hostPort:

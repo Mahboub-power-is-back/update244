@@ -104,10 +104,7 @@ class ConnectionHandler(threading.Thread):
     def run(self):
         try:
             self.client_buffer = self.client.recv(BUFLEN)
-            hostPort = self.findHeader(self.client_buffer, 'X-Real-Host')
-
-            if hostPort == '':
-                hostPort = DEFAULT_HOST
+            hostPort = DEFAULT_HOST
 
             split = self.findHeader(self.client_buffer, 'X-Split')
             if split != '':
