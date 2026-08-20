@@ -256,7 +256,8 @@ WantedBy=multi-user.target
 END
 
 # Service Stunnel5 /etc/init.d/stunnel5
-wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
+wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init" || true
+chmod +x /etc/init.d/stunnel5 2>/dev/null || true
 
 # Ubah Izin Akses
 # Debian/Ubuntu stunnel4 packages use /usr/bin/stunnel and the certificate
@@ -265,13 +266,19 @@ chmod 600 /etc/xray/xray.key /etc/xray/xray.crt 2>/dev/null || true
 #rm -f /usr/local/bin/stunnel5
 
 # Restart Stunnel 5
-systemctl stop stunnel5
+systemctl stop stunnel5 2>/dev/null || true
+systemctl daemon-reload
 systemctl enable stunnel5
-systemctl start stunnel5
-systemctl restart stunnel5
-systemctl restart stunnel5
-/etc/init.d/stunnel5 status
-systemctl restart stunnel5
+if ! systemctl restart stunnel5; then
+  echo "ERROR: stunnel5 failed to start." >&2
+  systemctl --no-pager --full status stunnel5 || true
+  exit 1
+fi
+if ! systemctl is-active --quiet stunnel5; then
+  echo "ERROR: stunnel5 is not active." >&2
+  systemctl --no-pager --full status stunnel5 || true
+  exit 1
+fi
 
 #OpenVPN
 wget https://${akbarvpn}/vpn.sh &&  chmod +x vpn.sh && ./vpn.sh
@@ -516,7 +523,7 @@ systemctl restart ssh
 systemctl restart dropbear
 systemctl restart fail2ban
 systemctl stop sslh 2>/dev/null || true
-systemctl restart stunnel5
+systemctl restart stunnel5 2>/dev/null || true
 systemctl restart vnstat
 systemctl restart fail2ban
 systemctl restart squid

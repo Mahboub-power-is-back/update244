@@ -1,46 +1,48 @@
 #!/bin/bash
-# My Telegram : https://t.me/Akbar218
-# ==========================================
-# Color
-RED='\033[0;31m'
-NC='\033[0m'
-GREEN='\033[0;32m'
-ORANGE='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-LIGHT='\033[0;37m'
-# ==========================================
+# Restart only services that actually exist on this installation.
 clear
-echo -e ""
-echo -e "Starting Restart All Service"
-sleep 2
-systemctl restart ssrmu
-systemctl restart ws-tls
-systemctl restart ws-nontls
-systemctl restart xray.service
-systemctl restart shadowsocks-libev
-systemctl restart xl2tpd
-systemctl restart pptpd
-systemctl restart ipsec
-systemctl restart accel-ppp
-systemctl restart ws-ovpn
-systemctl restart wg-quick@wg0
-systemctl restart ssh-ohp
-systemctl restart dropbear-ohp
-systemctl restart openvpn-ohp
-systemctl restart trojan-go
-/etc/init.d/ssrmu restart
-/etc/init.d/ssh restart
-/etc/init.d/dropbear restart
-systemctl reload nginx
-/etc/init.d/stunnel5 restart
-/etc/init.d/openvpn restart
-/etc/init.d/fail2ban restart
-/etc/init.d/cron restart
-/etc/init.d/nginx restart
-/etc/init.d/squid restart
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 1000
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000
-echo -e "Restart All Service Berhasil"
+echo "Starting Restart All Service"
+
+restart_unit() {
+    local unit="$1"
+    if systemctl cat "$unit" >/dev/null 2>&1; then
+        systemctl restart "$unit" >/dev/null 2>&1 && echo "Restarted $unit" || echo "FAILED $unit"
+    fi
+}
+
+restart_init() {
+    local script="$1"
+    if [ -x "$script" ]; then
+        "$script" restart >/dev/null 2>&1 && echo "Restarted $script" || echo "FAILED $script"
+    fi
+}
+
+for unit in \
+    ssrmu ws-tls ws-nontls xray.service shadowsocks-libev xl2tpd pptpd ipsec \
+    accel-ppp ws-ovpn wg-quick@wg0 ssh-ohp dropbear-ohp openvpn-ohp trojan-go \
+    stunnel5 fail2ban cron squid vnstat; do
+    restart_unit "$unit"
+done
+
+restart_init /etc/init.d/ssrmu
+restart_init /etc/init.d/ssh
+restart_init /etc/init.d/dropbear
+restart_init /etc/init.d/openvpn
+
+if command -v nginx >/dev/null 2>&1; then
+    if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+        echo "Restarted nginx"
+    else
+        echo "SKIPPED nginx: configuration test failed"
+    fi
+fi
+
+if command -v badvpn-udpgw >/dev/null 2>&1; then
+    for port in 7100 7200 7300; do
+        screen -S "badvpn-$port" -X quit >/dev/null 2>&1 || true
+        screen -dmS "badvpn-$port" badvpn-udpgw --listen-addr "127.0.0.1:$port" --max-clients 1000
+    done
+fi
+
+echo "Restart All Service Complete"
