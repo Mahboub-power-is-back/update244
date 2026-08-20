@@ -1,7 +1,7 @@
 #!/bin/bash
 # MAHBOUB TUNNEL PREMIUM - Premium menu design
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+if [ -r "$BASE_DIR/ui.sh" ]; then . "$BASE_DIR/ui.sh"; elif [ -r /usr/bin/ui.sh ]; then . /usr/bin/ui.sh; else echo "ERROR: ui.sh not found"; exit 1; fi
 ui_submenu 'VLESS • XRAY'
 ui_item 1 'Create VLESS WebSocket account' '➕' "$GREEN"
 ui_item 2 'Delete VLESS WebSocket account' '✕' "$RED"
