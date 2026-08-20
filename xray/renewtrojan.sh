@@ -1,3 +1,3 @@
 #!/bin/bash
 set -euo pipefail
-exec /usr/local/bin/xray-account renew
+exec /usr/local/bin/xray-account renew trojan

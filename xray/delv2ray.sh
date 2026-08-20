@@ -1,3 +1,3 @@
 #!/bin/bash
 set -euo pipefail
-exec /usr/local/bin/xray-account delete
+exec /usr/local/bin/xray-account delete vmess

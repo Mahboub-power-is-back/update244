@@ -94,10 +94,10 @@ cat > /etc/xray/config.json << END
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vmess-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11005,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
 #MT-vmess-httpupgrade-tls
-]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11006,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
 #MT-vmess-httpupgrade-none
-]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11007,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
 #MT-vmess-grpc-tls
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vmess-grpc","multiMode":false}}},
@@ -124,10 +124,10 @@ cat > /etc/xray/config.json << END
 ],"decryption":"none"},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vless-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11015,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
 #MT-vless-httpupgrade-tls
-],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
+],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11016,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
 #MT-vless-httpupgrade-none
-],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
+],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11017,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
 #MT-vless-grpc-tls
 ],"decryption":"none"},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vless-grpc","multiMode":false}}},
@@ -154,10 +154,10 @@ cat > /etc/xray/config.json << END
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/trojan-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11025,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
 #MT-trojan-httpupgrade-tls
-]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11026,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
 #MT-trojan-httpupgrade-none
-]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
+]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-httpupgrade/","host":""}}},
     {"listen":"127.0.0.1","port":11027,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
 #MT-trojan-grpc-tls
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"trojan-grpc","multiMode":false}}},
@@ -178,22 +178,56 @@ cat > /etc/xray/config.json << END
 END
 
 # Unified Xray account manager.
-# One account = one UUID shared by VMess, VLESS and Trojan.
+# Each protocol menu manages ONLY its own protocol.
+# One account gets one UUID/password, and every transport link for that
+# selected protocol uses the same credential.
 cat > /usr/local/bin/xray-account <<'XRAYACCOUNT'
 #!/bin/bash
 set -euo pipefail
 
 CONFIG=/etc/xray/config.json
-DB=/etc/xray/xray-accounts.db
+BASEDB=/etc/xray/xray-accounts.db
 VMDB=/etc/xray/vmess-accounts.db
 VLDB=/etc/xray/vless-accounts.db
 TRDB=/etc/xray/trojan-accounts.db
 DOMAIN_FILE=/etc/xray/domain
+LINK_DIR=/etc/xray/links
 
-die(){ echo "ERROR: $*" >&2; exit 1; }
-[ -s "$CONFIG" ] || die "Xray config not found: $CONFIG"
-[ -s "$DOMAIN_FILE" ] || die "Xray domain not found: $DOMAIN_FILE"
-domain=$(cat "$DOMAIN_FILE")
+RED=$'\033[38;5;203m'
+GREEN=$'\033[38;5;46m'
+YELLOW=$'\033[38;5;226m'
+BLUE=$'\033[38;5;39m'
+PURPLE=$'\033[38;5;141m'
+CYAN=$'\033[38;5;51m'
+WHITE=$'\033[38;5;255m'
+GRAY=$'\033[38;5;245m'
+RESET=$'\033[0m'
+
+fail(){ printf '%bERROR:%b %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
+[ -s "$CONFIG" ] || fail "Xray config not found: $CONFIG"
+[ -s "$DOMAIN_FILE" ] || fail "Xray domain not found: $DOMAIN_FILE"
+domain=$(tr -d '[:space:]' < "$DOMAIN_FILE")
+mkdir -p "$LINK_DIR"
+
+proto_name(){
+    case "$1" in
+        vless) printf 'VLESS' ;;
+        vmess) printf 'VMESS' ;;
+        trojan) printf 'TROJAN' ;;
+        *) fail "Unsupported protocol: $1" ;;
+    esac
+}
+
+db_for(){
+    case "$1" in
+        vless) printf '%s' "$VLDB" ;;
+        vmess) printf '%s' "$VMDB" ;;
+        trojan) printf '%s' "$TRDB" ;;
+        *) fail "Unsupported protocol: $1" ;;
+    esac
+}
+
+valid_proto(){ case "$1" in vless|vmess|trojan) return 0;; *) return 1;; esac; }
 
 save_db_line(){
     local db="$1" line="$2"
@@ -201,190 +235,300 @@ save_db_line(){
     grep -Fqx "$line" "$db" 2>/dev/null || printf '%s\n' "$line" >> "$db"
 }
 
+remove_db_user(){
+    local db="$1" user="$2"
+    [ -f "$db" ] || return 0
+    awk -v u="$user" '$1 != u' "$db" > "${db}.tmp"
+    mv -f "${db}.tmp" "$db"
+}
+
+enc(){ python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+
+box(){
+    printf '%b+------------------------------------------------------------------------------+%b\n' "$PURPLE" "$RESET"
+}
+
+print_link(){
+    local n="$1" label="$2" link="$3"
+    printf '%b[%02d] %-11s%b %s\n' "$CYAN" "$n" "$label" "$RESET" "$link"
+}
+
+show_vless(){
+    local user="$1" uuid="$2" file="$3"
+    local vws vx vh vg
+    vws=$(enc /vless/); vx=$(enc /vless-xhttp/); vh=$(enc /vless-httpupgrade/); vg=$(enc vless-grpc)
+    {
+        echo "MAHBOUB TUNNEL PREMIUM - VLESS"
+        echo "User: $user"
+        echo "UUID: $uuid"
+        echo "Domain: $domain"
+        echo
+        echo "[ WebSocket ]"
+        echo "WS TLS    : vless://${uuid}@${domain}:443?encryption=none&security=tls&type=ws&host=${domain}&path=${vws}&sni=${domain}#${user}"
+        echo "WS NTLS   : vless://${uuid}@${domain}:80?encryption=none&security=none&type=ws&host=${domain}&path=${vws}#${user}"
+        echo
+        echo "[ XHTTP / HTTP2 ]"
+        echo "XHTTP TLS : vless://${uuid}@${domain}:443?encryption=none&security=tls&type=xhttp&alpn=h2&host=${domain}&path=${vx}&mode=auto&sni=${domain}#${user}"
+        echo "XHTTP NTLS: vless://${uuid}@${domain}:80?encryption=none&security=none&type=xhttp&host=${domain}&path=${vx}&mode=auto#${user}"
+        echo
+        echo "[ HTTP Upgrade ]"
+        echo "HU TLS    : vless://${uuid}@${domain}:443?encryption=none&security=tls&type=httpupgrade&host=${domain}&path=${vh}&sni=${domain}#${user}"
+        echo "HU NTLS   : vless://${uuid}@${domain}:80?encryption=none&security=none&type=httpupgrade&host=${domain}&path=${vh}#${user}"
+        echo
+        echo "[ gRPC / HTTP2 ]"
+        echo "gRPC TLS  : vless://${uuid}@${domain}:443?encryption=none&security=tls&type=grpc&alpn=h2&serviceName=${vg}&sni=${domain}#${user}"
+        echo "gRPC NTLS : vless://${uuid}@${domain}:80?encryption=none&security=none&type=grpc&serviceName=${vg}#${user}"
+        echo
+        echo "[ RAW / TCP ]"
+        echo "TCP TLS   : vless://${uuid}@${domain}:11019?encryption=none&security=tls&type=tcp&sni=${domain}#${user}"
+        echo "TCP NTLS  : vless://${uuid}@${domain}:11020?encryption=none&security=none&type=tcp#${user}"
+    } > "$file"
+}
+
+vmess_link(){
+    local port="$1" net="$2" tls="$3" path="$4" alpn="$5"
+    python3 - "$domain" "$port" "$VM_UUID" "$VM_USER" "$net" "$tls" "$path" "$alpn" <<'XRAYPY'
+import base64,json,sys
+host,port,uid,remark,net,tls,path,alpn=sys.argv[1:]
+o={"v":"2","ps":remark,"add":host,"port":port,"id":uid,"aid":"0","scy":"auto","net":net,"type":"none","host":host,"path":path,"tls":tls}
+if alpn:
+    o["alpn"]=alpn
+print("vmess://"+base64.b64encode(json.dumps(o,separators=(",",":"),ensure_ascii=False).encode()).decode())
+XRAYPY
+}
+
+show_vmess(){
+    local user="$1" uuid="$2" file="$3"
+    VM_UUID="$uuid" VM_USER="$user"
+    {
+        echo "MAHBOUB TUNNEL PREMIUM - VMESS"
+        echo "User: $user"
+        echo "UUID: $uuid"
+        echo "Domain: $domain"
+        echo
+        echo "[ WebSocket ]"
+        echo "WS TLS    : $(vmess_link 443 ws tls /vmess/ http/1.1)"
+        echo "WS NTLS   : $(vmess_link 80 ws none /vmess/ '')"
+        echo
+        echo "[ XHTTP / HTTP2 ]"
+        echo "XHTTP TLS : $(vmess_link 443 xhttp tls /vmess-xhttp/ h2)"
+        echo "XHTTP NTLS: $(vmess_link 80 xhttp none /vmess-xhttp/ '')"
+        echo
+        echo "[ HTTP Upgrade ]"
+        echo "HU TLS    : $(vmess_link 443 httpupgrade tls /vmess-httpupgrade/ http/1.1)"
+        echo "HU NTLS   : $(vmess_link 80 httpupgrade none /vmess-httpupgrade/ '')"
+        echo
+        echo "[ gRPC / HTTP2 ]"
+        echo "gRPC TLS  : $(vmess_link 443 grpc tls vmess-grpc h2)"
+        echo "gRPC NTLS : $(vmess_link 80 grpc none vmess-grpc '')"
+        echo
+        echo "[ RAW / TCP ]"
+        echo "TCP TLS   : $(vmess_link 11009 tcp tls / '')"
+        echo "TCP NTLS  : $(vmess_link 11010 tcp none / '')"
+    } > "$file"
+}
+
+show_trojan(){
+    local user="$1" uuid="$2" file="$3"
+    local tws tx th tg
+    tws=$(enc /trojan/); tx=$(enc /trojan-xhttp/); th=$(enc /trojan-httpupgrade/); tg=$(enc trojan-grpc)
+    {
+        echo "MAHBOUB TUNNEL PREMIUM - TROJAN"
+        echo "User: $user"
+        echo "Password/UUID: $uuid"
+        echo "Domain: $domain"
+        echo
+        echo "[ WebSocket ]"
+        echo "WS TLS    : trojan://${uuid}@${domain}:443?security=tls&type=ws&host=${domain}&path=${tws}&sni=${domain}#${user}"
+        echo "WS NTLS   : trojan://${uuid}@${domain}:80?security=none&type=ws&host=${domain}&path=${tws}#${user}"
+        echo
+        echo "[ XHTTP / HTTP2 ]"
+        echo "XHTTP TLS : trojan://${uuid}@${domain}:443?security=tls&type=xhttp&alpn=h2&host=${domain}&path=${tx}&mode=auto&sni=${domain}#${user}"
+        echo "XHTTP NTLS: trojan://${uuid}@${domain}:80?security=none&type=xhttp&host=${domain}&path=${tx}&mode=auto#${user}"
+        echo
+        echo "[ HTTP Upgrade ]"
+        echo "HU TLS    : trojan://${uuid}@${domain}:443?security=tls&type=httpupgrade&host=${domain}&path=${th}&sni=${domain}#${user}"
+        echo "HU NTLS   : trojan://${uuid}@${domain}:80?security=none&type=httpupgrade&host=${domain}&path=${th}#${user}"
+        echo
+        echo "[ gRPC / HTTP2 ]"
+        echo "gRPC TLS  : trojan://${uuid}@${domain}:443?security=tls&type=grpc&alpn=h2&serviceName=${tg}&sni=${domain}#${user}"
+        echo "gRPC NTLS : trojan://${uuid}@${domain}:80?security=none&type=grpc&serviceName=${tg}#${user}"
+        echo
+        echo "[ RAW / TCP ]"
+        echo "TCP TLS   : trojan://${uuid}@${domain}:11029?security=tls&type=tcp&sni=${domain}#${user}"
+        echo "TCP NTLS  : trojan://${uuid}@${domain}:11030?security=none&type=tcp#${user}"
+    } > "$file"
+}
+
+show_links(){
+    local proto="$1" user="$2" uuid="$3" exp="$4"
+    local file="$LINK_DIR/${proto}-${user}.txt"
+    case "$proto" in
+        vless) show_vless "$user" "$uuid" "$file" ;;
+        vmess) show_vmess "$user" "$uuid" "$file" ;;
+        trojan) show_trojan "$user" "$uuid" "$file" ;;
+    esac
+
+    box
+    printf '%b|%b  MAHBOUB TUNNEL PREMIUM  |  %b%s%b\n' "$PURPLE" "$RESET" "$CYAN" "$(proto_name "$proto")" "$RESET"
+    printf '%b|%b  User     : %b%s%b\n' "$PURPLE" "$RESET" "$WHITE" "$user" "$RESET"
+    printf '%b|%b  Expires  : %b%s%b\n' "$PURPLE" "$RESET" "$YELLOW" "$exp" "$RESET"
+    printf '%b|%b  UUID     : %b%s%b\n' "$PURPLE" "$RESET" "$GREEN" "$uuid" "$RESET"
+    printf '%b|%b  Links    : %b%s%b\n' "$PURPLE" "$RESET" "$GRAY" "$file" "$RESET"
+    box
+
+    local i=1 label link label_raw
+    while IFS= read -r line; do
+        case "$line" in
+            WS*|XHTTP*|HU*|gRPC*|TCP*) ;;
+            *) continue ;;
+        esac
+        label_raw="${line%%:*}"
+        label="$(printf '%s' "$label_raw" | xargs)"
+        link="${line#*: }"
+        case "$label" in
+            "WS TLS"|"WS NTLS"|"XHTTP TLS"|"XHTTP NTLS"|"gRPC TLS"|"gRPC NTLS"|"TCP TLS"|"TCP NTLS") ;;
+            "HU TLS") label="HTTP-UP TLS" ;;
+            "HU NTLS") label="HTTP-UP NTLS" ;;
+            *) continue ;;
+        esac
+        print_link "$i" "$label" "$link"
+        i=$((i+1))
+    done < "$file"
+    printf '%b+------------------------------------------------------------------------------+%b\n' "$PURPLE" "$RESET"
+    printf '%bTip:%b The selected protocol owns this UUID. Other protocol links are not created.\n' "$CYAN" "$RESET"
+    printf '%bFile:%b %s\n' "$CYAN" "$RESET" "$file"
+    echo
+}
+
 add_account(){
+    local proto="$1" db
+    valid_proto "$proto" || fail "Invalid protocol"
+    db=$(db_for "$proto")
+    local pname; pname=$(proto_name "$proto")
+
+    printf '%b\n=== CREATE %s ACCOUNT ===%b\n' "$PURPLE" "$pname" "$RESET"
     read -rp "Username : " user
-    [[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || die "Invalid username"
-    if [ -f "$DB" ] && grep -Fq "$user " "$DB"; then
-        die "Account already exists: $user"
+    [[ "$user" =~ ^[A-Za-z0-9_.-]+$ ]] || fail "Invalid username"
+    touch "$db"
+    if grep -q "^${user} " "$db"; then
+        fail "${pname} account already exists: $user"
     fi
     read -rp "Expired (Days) : " days
-    [[ "$days" =~ ^[0-9]+$ ]] || die "Days must be a number"
+    [[ "$days" =~ ^[0-9]+$ ]] || fail "Days must be a number"
+    local exp uuid
     exp=$(date -d "+${days} days" +%Y-%m-%d)
-    uuid=$(cat /proc/sys/kernel/random/uuid)
+    uuid=$(xray uuid 2>/dev/null || cat /proc/sys/kernel/random/uuid)
 
-    python3 - "$CONFIG" "$user" "$uuid" <<'PY'
+    python3 - "$CONFIG" "$proto" "$user" "$uuid" <<'XRAYPY'
 import json,sys,tempfile,os
-p,user,uid=sys.argv[1:]
-with open(p) as f: d=json.load(f)
-
-protocols={"vmess","vless","trojan"}
-found_uid=None
+p,proto,user,uid=sys.argv[1:]
+d=json.load(open(p))
+seen=False
 for ib in d.get("inbounds",[]):
-    if ib.get("protocol") not in protocols: continue
-    for c in ib.get("settings",{}).get("clients",[]) or []:
-        if c.get("email")==user:
-            found_uid=c.get("id") or c.get("password")
-            break
-    if found_uid: break
-
-if found_uid:
-    uid=found_uid
-
-for ib in d.get("inbounds",[]):
-    proto=ib.get("protocol")
-    if proto not in protocols: continue
+    if ib.get("protocol") != proto: continue
     clients=ib.setdefault("settings",{}).setdefault("clients",[])
-    # Remove accidental duplicate entries for this account in the same inbound.
-    clients[:] = [c for c in clients if c.get("email") != user]
-    if proto=="vmess":
+    clients[:] = [c for c in clients if c.get("email") != user and c.get("id") != uid and c.get("password") != uid]
+    if proto == "vmess":
         clients.append({"id":uid,"alterId":0,"email":user})
-    elif proto=="vless":
+    elif proto == "vless":
         clients.append({"id":uid,"email":user})
-    else:
+    elif proto == "trojan":
         clients.append({"password":uid,"email":user})
-
+    seen=True
+if not seen:
+    raise SystemExit("No matching protocol in Xray config")
 fd,tmp=tempfile.mkstemp(prefix=".xray.",dir=os.path.dirname(p))
 with os.fdopen(fd,"w") as f:
-    json.dump(d,f,indent=2)
-    f.write("\n")
+    json.dump(d,f,indent=2); f.write("\n")
 os.replace(tmp,p)
-print(uid)
-PY
-    uuid=$(python3 - "$CONFIG" "$user" <<'PY'
-import json,sys
-d=json.load(open(sys.argv[1])); u=sys.argv[2]
-for ib in d.get("inbounds",[]):
-    for c in ib.get("settings",{}).get("clients",[]) or []:
-        if c.get("email")==u:
-            print(c.get("id") or c.get("password")); raise SystemExit
-raise SystemExit(1)
-PY
-)
+XRAYPY
 
-    line="$user $exp $uuid"
-    save_db_line "$DB" "$line"
-    save_db_line "$VMDB" "$line"
-    save_db_line "$VLDB" "$line"
-    save_db_line "$TRDB" "$line"
+    local line="$user $exp $uuid"
+    save_db_line "$db" "$line"
+    save_db_line "$BASEDB" "$proto $line"
 
     /usr/local/bin/xray run -test -config "$CONFIG" >/dev/null
     systemctl restart xray.service
-
-    enc(){ python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
-    vws=$(enc /vless/); vx=$(enc /vless-xhttp/); vh=$(enc /vless-hu/); vg=$(enc vless-grpc)
-    mws=$(enc /vmess/); mx=$(enc /vmess-xhttp/); mh=$(enc /vmess-httpupgrade/); mg=$(enc vmess-grpc)
-    tws=$(enc /trojan/); tx=$(enc /trojan-xhttp/); th=$(enc /trojan-hu/); tg=$(enc trojan-grpc)
-
-    echo
-    echo "===== XRAY ACCOUNT ====="
-    echo "User     : $user"
-    echo "Expires  : $exp"
-    echo "UUID     : $uuid"
-    echo
-    echo "VLESS"
-    echo "WS TLS    : vless://${uuid}@${domain}:443?security=tls&type=ws&host=${domain}&path=${vws}&sni=${domain}#${user}"
-    echo "WS NTLS   : vless://${uuid}@${domain}:80?security=none&type=ws&host=${domain}&path=${vws}#${user}"
-    echo "XHTTP TLS : vless://${uuid}@${domain}:443?security=tls&type=xhttp&host=${domain}&path=${vx}&mode=auto&sni=${domain}#${user}"
-    echo "XHTTP NTLS: vless://${uuid}@${domain}:80?security=none&type=xhttp&host=${domain}&path=${vx}&mode=auto#${user}"
-    echo "HU TLS    : vless://${uuid}@${domain}:443?security=tls&type=httpupgrade&host=${domain}&path=${vh}&sni=${domain}#${user}"
-    echo "HU NTLS   : vless://${uuid}@${domain}:80?security=none&type=httpupgrade&host=${domain}&path=${vh}#${user}"
-    echo "gRPC TLS  : vless://${uuid}@${domain}:443?security=tls&type=grpc&serviceName=${vg}&sni=${domain}#${user}"
-    echo "gRPC NTLS : vless://${uuid}@${domain}:80?security=none&type=grpc&serviceName=${vg}#${user}"
-    echo "TCP TLS   : vless://${uuid}@${domain}:11019?security=tls&type=tcp&sni=${domain}#${user}"
-    echo "TCP NTLS  : vless://${uuid}@${domain}:11020?security=none&type=tcp#${user}"
-    echo
-    echo "VMESS"
-    vmess_link(){
-      local port="$1" net="$2" tls="$3" path="$4"
-      python3 - "$domain" "$port" "$uuid" "$user" "$net" "$tls" "$path" <<'PY'
-import base64,json,sys
-host,port,uid,remark,net,tls,path=sys.argv[1:]
-o={"v":"2","ps":remark,"add":host,"port":port,"id":uid,"aid":"0","scy":"auto","net":net,"type":"none","host":host,"path":path,"tls":tls}
-print("vmess://"+base64.b64encode(json.dumps(o,separators=(",",":")).encode()).decode())
-PY
-    }
-    echo "WS TLS    : $(vmess_link 443 ws tls /vmess/)"
-    echo "WS NTLS   : $(vmess_link 80 ws none /vmess/)"
-    echo "XHTTP TLS : $(vmess_link 443 xhttp tls /vmess-xhttp/)"
-    echo "XHTTP NTLS: $(vmess_link 80 xhttp none /vmess-xhttp/)"
-    echo "HU TLS    : $(vmess_link 443 httpupgrade tls /vmess-httpupgrade/)"
-    echo "HU NTLS   : $(vmess_link 80 httpupgrade none /vmess-httpupgrade/)"
-    echo "gRPC TLS  : $(vmess_link 443 grpc tls vmess-grpc)"
-    echo "gRPC NTLS : $(vmess_link 80 grpc none vmess-grpc)"
-    echo "TCP TLS   : $(vmess_link 11009 tcp tls /)"
-    echo "TCP NTLS  : $(vmess_link 11010 tcp none /)"
-    echo
-    echo "TROJAN"
-    echo "WS TLS    : trojan://${uuid}@${domain}:443?security=tls&type=ws&host=${domain}&path=${tws}&sni=${domain}#${user}"
-    echo "WS NTLS   : trojan://${uuid}@${domain}:80?security=none&type=ws&host=${domain}&path=${tws}#${user}"
-    echo "XHTTP TLS : trojan://${uuid}@${domain}:443?security=tls&type=xhttp&host=${domain}&path=${tx}&mode=auto&sni=${domain}#${user}"
-    echo "XHTTP NTLS: trojan://${uuid}@${domain}:80?security=none&type=xhttp&host=${domain}&path=${tx}&mode=auto#${user}"
-    echo "HU TLS    : trojan://${uuid}@${domain}:443?security=tls&type=httpupgrade&host=${domain}&path=${th}&sni=${domain}#${user}"
-    echo "HU NTLS   : trojan://${uuid}@${domain}:80?security=none&type=httpupgrade&host=${domain}&path=${th}#${user}"
-    echo "gRPC TLS  : trojan://${uuid}@${domain}:443?security=tls&type=grpc&serviceName=${tg}&sni=${domain}#${user}"
-    echo "gRPC NTLS : trojan://${uuid}@${domain}:80?security=none&type=grpc&serviceName=${tg}#${user}"
-    echo "TCP TLS   : trojan://${uuid}@${domain}:11029?security=tls&type=tcp&sni=${domain}#${user}"
-    echo "TCP NTLS  : trojan://${uuid}@${domain}:11030?security=none&type=tcp#${user}"
+    show_links "$proto" "$user" "$uuid" "$exp"
 }
 
 list_accounts(){
-    [ -s "$DB" ] || { echo "No Xray accounts"; return; }
-    nl -w2 -s ') ' "$DB"
+    local proto="$1" db pname
+    valid_proto "$proto" || fail "Invalid protocol"
+    db=$(db_for "$proto"); pname=$(proto_name "$proto")
+    printf '%b\n=== %s ACCOUNTS ===%b\n' "$PURPLE" "$pname" "$RESET"
+    if [ ! -s "$db" ]; then
+        printf '%bNo %s accounts.%b\n' "$GRAY" "$pname" "$RESET"
+        return
+    fi
+    printf '%b%-4s %-20s %-12s %s%b\n' "$CYAN" '#' 'USERNAME' 'EXPIRES' 'UUID' "$RESET"
+    printf '%b%s%b\n' "$GRAY" '--------------------------------------------------------------------------------' "$RESET"
+    nl -w2 -s') ' "$db"
 }
 
 delete_account(){
-    [ -s "$DB" ] || die "No Xray accounts"
-    list_accounts
+    local proto="$1" db
+    valid_proto "$proto" || fail "Invalid protocol"
+    db=$(db_for "$proto")
+    [ -s "$db" ] || fail "No $(proto_name "$proto") accounts"
+    list_accounts "$proto"
     read -rp "Select account number: " n
-    line=$(sed -n "${n}p" "$DB")
-    [ -n "$line" ] || die "Invalid account"
+    local line user uuid
+    line=$(sed -n "${n}p" "$db")
+    [ -n "$line" ] || fail "Invalid account"
     user=$(awk '{print $1}' <<<"$line")
     uuid=$(awk '{print $3}' <<<"$line")
-    python3 - "$CONFIG" "$user" "$uuid" <<'PY'
+    python3 - "$CONFIG" "$proto" "$user" "$uuid" <<'XRAYPY'
 import json,sys,tempfile,os
-p,user,uid=sys.argv[1:]
+p,proto,user,uid=sys.argv[1:]
 d=json.load(open(p))
 for ib in d.get("inbounds",[]):
-    if ib.get("protocol") not in ("vmess","vless","trojan"): continue
+    if ib.get("protocol") != proto: continue
     c=ib.get("settings",{}).get("clients",[])
     ib["settings"]["clients"]=[x for x in c if x.get("email")!=user and x.get("id")!=uid and x.get("password")!=uid]
 fd,tmp=tempfile.mkstemp(prefix=".xray.",dir=os.path.dirname(p))
 with os.fdopen(fd,"w") as f: json.dump(d,f,indent=2); f.write("\n")
 os.replace(tmp,p)
-PY
-    for db in "$DB" "$VMDB" "$VLDB" "$TRDB"; do
-        [ -f "$db" ] && sed -i "/^${user//\//\\/} /d" "$db" || true
-    done
+XRAYPY
+    remove_db_user "$db" "$user"
+    [ -f "$BASEDB" ] && sed -i "/^${proto//\//\/} ${user//\//\/} /d" "$BASEDB" || true
+    rm -f "$LINK_DIR/${proto}-${user}.txt"
     /usr/local/bin/xray run -test -config "$CONFIG" >/dev/null
     systemctl restart xray.service
-    echo "Deleted $user ($uuid)"
+    printf '%bDeleted%b %s %s (%s)\n' "$GREEN" "$RESET" "$(proto_name "$proto")" "$user" "$uuid"
 }
 
 renew_account(){
-    [ -s "$DB" ] || die "No Xray accounts"
-    list_accounts
+    local proto="$1" db
+    valid_proto "$proto" || fail "Invalid protocol"
+    db=$(db_for "$proto")
+    [ -s "$db" ] || fail "No $(proto_name "$proto") accounts"
+    list_accounts "$proto"
     read -rp "Select account number: " n
     read -rp "Add days: " days
-    [[ "$days" =~ ^[0-9]+$ ]] || die "Days must be a number"
-    line=$(sed -n "${n}p" "$DB")
-    [ -n "$line" ] || die "Invalid account"
+    [[ "$days" =~ ^[0-9]+$ ]] || fail "Days must be a number"
+    local line user exp uuid newexp
+    line=$(sed -n "${n}p" "$db")
+    [ -n "$line" ] || fail "Invalid account"
     user=$(awk '{print $1}' <<<"$line")
     exp=$(awk '{print $2}' <<<"$line")
     uuid=$(awk '{print $3}' <<<"$line")
     newexp=$(date -d "$exp + $days days" +%Y-%m-%d)
-    sed -i "${n}c\\${user} ${newexp} ${uuid}" "$DB"
-    for db in "$VMDB" "$VLDB" "$TRDB"; do
-      [ -f "$db" ] && sed -i "s/^${user//\//\\/} .*/${user} ${newexp} ${uuid}/" "$db" || true
-    done
-    echo "Renewed $user until $newexp"
+    sed -i "${n}c\${user} ${newexp} ${uuid}" "$db"
+    if [ -f "$BASEDB" ]; then
+        sed -i "/^${proto//\//\/} ${user//\//\/} /d" "$BASEDB"
+        printf '%s\n' "$proto $user $newexp $uuid" >> "$BASEDB"
+    fi
+    printf '%bRenewed%b %s %s until %s\n' "$GREEN" "$RESET" "$(proto_name "$proto")" "$user" "$newexp"
 }
 
 case "${1:-}" in
-  add) add_account ;;
-  delete) delete_account ;;
-  renew) renew_account ;;
-  list) list_accounts ;;
-  *) echo "Usage: xray-account {add|delete|renew|list}"; exit 2 ;;
+  add) [ -n "${2:-}" ] || fail "Usage: xray-account add {vless|vmess|trojan}"; add_account "$2" ;;
+  delete) [ -n "${2:-}" ] || fail "Usage: xray-account delete {vless|vmess|trojan}"; delete_account "$2" ;;
+  renew) [ -n "${2:-}" ] || fail "Usage: xray-account renew {vless|vmess|trojan}"; renew_account "$2" ;;
+  list) [ -n "${2:-}" ] || fail "Usage: xray-account list {vless|vmess|trojan}"; list_accounts "$2" ;;
+  *) echo "Usage: xray-account {add|delete|renew|list} {vless|vmess|trojan}"; exit 2 ;;
 esac
 XRAYACCOUNT
 chmod 700 /usr/local/bin/xray-account

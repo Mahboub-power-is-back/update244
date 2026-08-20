@@ -1,3 +1,3 @@
 #!/bin/bash
 set -euo pipefail
-exec /usr/local/bin/xray-account add
+exec /usr/local/bin/xray-account add trojan
