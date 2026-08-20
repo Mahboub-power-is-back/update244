@@ -177,6 +177,7 @@ server {
     location /trojan-grpc { grpc_pass grpc://trojan_grpc_none; grpc_set_header Host $host; }
     location /trojango { proxy_pass http://trojango_ws; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
     location /ssh-ws { proxy_pass http://ssh_ws_none; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
+    location /sshws { proxy_pass http://ssh_ws_none; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
     location / { root /home/vps/public_html; index index.html; }
 }
 
@@ -201,6 +202,7 @@ server {
     location /trojan-httpupgrade/ { proxy_pass http://trojan_httpupgrade_tls; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
     location /trojango { proxy_pass http://trojango_ws; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
     location /ssh-ws { proxy_pass http://ssh_ws_tls; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
+    location /sshws { proxy_pass http://ssh_ws_tls; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; proxy_set_header Host $host; }
     location /trojan-grpc { grpc_pass grpc://trojan_grpc_tls; grpc_set_header Host $host; }
     location / { root /home/vps/public_html; index index.html; }
 }
