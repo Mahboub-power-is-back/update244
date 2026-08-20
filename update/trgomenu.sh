@@ -1,44 +1,14 @@
 #!/bin/bash
 clear
-m="\033[0;1;36m"
-y="\033[0;1;37m"
-yy="\033[0;1;32m"
-yl="\033[0;1;33m"
-wh="\033[0m"
-echo -e "$y                        TROJAN GO $wh"
-echo -e "$y-------------------------------------------------------------$wh"
-echo -e "$yy 1$y. Create Account Trojan Go"
-echo -e "$yy 2$y. Delete Account Trojan Go"
-echo -e "$yy 3$y. Extending Account Trojan Go Active Life"
-echo -e "$yy 4$y. Check User Login Trojan Go"
-echo -e "$yy 5$y. Menu"
-echo -e "$yy 6$y. Exit"
-echo -e "$y-------------------------------------------------------------$wh"
-read -p "Select From Options [ 1 - 6 ] : " menu
-echo -e ""
-case $menu in
-1)
-addtrgo
-;;
-2)
-deltrgo
-;;
-3)
-renewtrgo
-;;
-4)
-cektrgo
-;;
-5)
-clear
-menu
-;;
-6)
-clear
-exit
-;;
-*)
-clear
-menu
-;;
-esac
+cat <<EOF
+╔══════════════════════════════════════════════╗
+║          MAHBOUB TUNNEL PREMIUM             ║
+║               TROJAN-GO MENU                ║
+╠══════════════════════════════════════════════╣
+║ 1 Create  2 Delete  3 Renew  4 Check        ║
+║ 5 Change Trojan-Go WS Path                   ║
+║ 6 Main Menu  7 Exit                          ║
+╚══════════════════════════════════════════════╝
+EOF
+read -rp 'Select: ' m
+case $m in 1)addtrgo;;2)deltrgo;;3)renewtrgo;;4)cektrgo;;5)/usr/local/bin/trojango-change-path;;6)clear;menu;;7)exit;;*)exec "$0";;esac
