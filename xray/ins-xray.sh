@@ -12,19 +12,10 @@ LIGHT='\033[0;37m'
 
 MYIP=$(wget -qO- ipinfo.io/ip);
 clear
-if [ ! -s /etc/xray/domain ]; then
-  echo "ERROR: /etc/xray/domain is missing or empty." >&2
-  exit 1
-fi
-domain=$(tr -d '\r\n' < /etc/xray/domain)
-if [ -z "$domain" ]; then
-  echo "ERROR: Xray domain is empty." >&2
-  exit 1
-fi
+domain=$(cat /etc/xray/domain)
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y iptables iptables-persistent curl socat xz-utils wget ca-certificates apt-transport-https gnupg dnsutils lsb-release cron bash-completion ntpdate unzip python3
-ntpdate pool.ntp.org
+apt-get install -y iptables iptables-persistent curl socat xz-utils wget ca-certificates apt-transport-https gnupg dnsutils lsb-release cron bash-completion unzip
 apt -y install chrony
 timedatectl set-ntp true
 systemctl enable --now chrony 2>/dev/null || systemctl enable --now chronyd 2>/dev/null || true
@@ -33,53 +24,22 @@ chronyc sourcestats -v
 chronyc tracking -v
 date
 
-# Resolve the newest Xray release. The API is preferred because the project
-# currently publishes newer pre-releases; fall back to the known-good release
-# if GitHub API access is temporarily unavailable.
-latest_version="$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
-  'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=10' 2>/dev/null \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["tag_name"].lstrip("v") if d else "")' 2>/dev/null || true)"
-latest_version="${latest_version:-26.7.28}"
-case "$latest_version" in
-  *[!0-9.]*|'')
-    echo "ERROR: invalid Xray version: $latest_version" >&2
-    exit 1
-    ;;
-esac
+# / / Ambil Xray Core Version Terbaru
+latest_version="$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases | grep tag_name | sed -E 's/.*"v(.*)".*/\1/' | head -n 1)"
 
-if [ "$(uname -m)" != "x86_64" ]; then
-  echo "ERROR: this Xray installer currently supports x86_64 only." >&2
-  exit 1
-fi
-
-xraycore_link="https://github.com/XTLS/Xray-core/releases/download/v${latest_version}/Xray-linux-64.zip"
-
-echo "Installing Xray-core v${latest_version} from: ${xraycore_link}"
+# / / Installation Xray Core
+xraycore_link="https://github.com/XTLS/Xray-core/releases/download/v$latest_version/Xray-linux-64.zip"
 
 # / / Make Main Directory
 mkdir -p /usr/bin/xray
 mkdir -p /etc/xray
 
-# / / Download and validate Xray Linux 64
-xray_tmp="$(mktemp -d)"
-trap 'rm -rf "$xray_tmp"' EXIT
-if ! curl -fL --retry 5 --retry-all-errors --retry-delay 2 \
-    "$xraycore_link" -o "$xray_tmp/xray.zip"; then
-  echo "ERROR: failed to download Xray-core v${latest_version}." >&2
-  exit 1
-fi
-if ! unzip -tq "$xray_tmp/xray.zip" >/dev/null; then
-  echo "ERROR: downloaded Xray archive is invalid." >&2
-  exit 1
-fi
-mkdir -p "$xray_tmp/unpack"
-unzip -q "$xray_tmp/xray.zip" -d "$xray_tmp/unpack"
-if [ ! -f "$xray_tmp/unpack/xray" ]; then
-  echo "ERROR: Xray binary was not found in the downloaded archive." >&2
-  exit 1
-fi
-install -m 0755 "$xray_tmp/unpack/xray" /usr/local/bin/xray
-/usr/local/bin/xray version | head -n 1
+# / / Unzip Xray Linux 64
+cd `mktemp -d`
+curl -sL "$xraycore_link" -o xray.zip
+unzip -q xray.zip && rm -rf xray.zip
+mv xray /usr/local/bin/xray
+chmod +x /usr/local/bin/xray
 
 # Make Folder XRay
 mkdir -p /var/log/xray/
@@ -121,64 +81,94 @@ cat > /etc/xray/config.json << END
   "log":{"access":"/var/log/xray/access.log","error":"/var/log/xray/error.log","loglevel":"info"},
   "inbounds":[
     {"listen":"127.0.0.1","port":11001,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-ws-tls
 ]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vmess/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11002,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-ws-none
 ]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vmess/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11003,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-xhttp-tls
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vmess-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11004,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-xhttp-none
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vmess-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11005,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-httpupgrade-tls
 ]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11006,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-httpupgrade-none
 ]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vmess-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11007,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-grpc-tls
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vmess-grpc","multiMode":false}}},
     {"listen":"127.0.0.1","port":11008,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-grpc-none
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vmess-grpc","multiMode":false}}},
     {"listen":"0.0.0.0","port":11009,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-raw-tls
 ]},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
     {"listen":"0.0.0.0","port":11010,"protocol":"vmess","settings":{"clients":[{"id":"${xray_uuid}","alterId":0}
+#MT-vmess-raw-none
 ]},"streamSettings":{"network":"raw","security":"none"}},
     {"listen":"127.0.0.1","port":11011,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-ws-tls
 ],"decryption":"none"},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vless/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11012,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-ws-none
 ],"decryption":"none"},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/vless/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11013,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-xhttp-tls
 ],"decryption":"none"},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vless-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11014,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-xhttp-none
 ],"decryption":"none"},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/vless-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11015,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-httpupgrade-tls
 ],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11016,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-httpupgrade-none
 ],"decryption":"none"},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/vless-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11017,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-grpc-tls
 ],"decryption":"none"},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vless-grpc","multiMode":false}}},
     {"listen":"127.0.0.1","port":11018,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-grpc-none
 ],"decryption":"none"},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"vless-grpc","multiMode":false}}},
     {"listen":"0.0.0.0","port":11019,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-raw-tls
 ],"decryption":"none"},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
     {"listen":"0.0.0.0","port":11020,"protocol":"vless","settings":{"clients":[{"id":"${xray_uuid}","email":""}
+#MT-vless-raw-none
 ],"decryption":"none"},"streamSettings":{"network":"raw","security":"none"}},
     {"listen":"127.0.0.1","port":11021,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-ws-tls
 ]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/trojan/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11022,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-ws-none
 ]},"streamSettings":{"network":"ws","security":"none","wsSettings":{"path":"/trojan/","headers":{"Host":""}}}},
     {"listen":"127.0.0.1","port":11023,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-xhttp-tls
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/trojan-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11024,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-xhttp-none
 ]},"streamSettings":{"network":"xhttp","security":"none","xhttpSettings":{"path":"/trojan-xhttp/","mode":"auto"}}},
     {"listen":"127.0.0.1","port":11025,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-httpupgrade-tls
 ]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11026,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-httpupgrade-none
 ]},"streamSettings":{"network":"httpupgrade","security":"none","httpupgradeSettings":{"path":"/trojan-hu/","host":""}}},
     {"listen":"127.0.0.1","port":11027,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-grpc-tls
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"trojan-grpc","multiMode":false}}},
     {"listen":"127.0.0.1","port":11028,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-grpc-none
 ]},"streamSettings":{"network":"grpc","security":"none","grpcSettings":{"serviceName":"trojan-grpc","multiMode":false}}},
     {"listen":"0.0.0.0","port":11029,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-raw-tls
 ]},"streamSettings":{"network":"raw","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${path_crt}","keyFile":"${path_key}"}]}}},
     {"listen":"0.0.0.0","port":11030,"protocol":"trojan","settings":{"clients":[{"password":"${xray_uuid}","email":""}
+#MT-trojan-raw-none
 ]},"streamSettings":{"network":"raw","security":"none"}}
   ],
   "outbounds":[{"protocol":"freedom","settings":{}},{"protocol":"blackhole","settings":{},"tag":"blocked"}],
@@ -435,21 +425,10 @@ if ! /usr/local/bin/xray run -test -config /etc/xray/config.json >/tmp/xray-conf
   cat /tmp/xray-config-test.log >&2
   exit 1
 fi
-systemctl daemon-reload
+systemctl stop xray.service || true
 systemctl enable xray.service
-if ! systemctl restart xray.service; then
-  echo "ERROR: xray.service failed to start." >&2
-  systemctl --no-pager --full status xray.service || true
-  journalctl -u xray.service -n 80 --no-pager || true
-  exit 1
-fi
-if ! systemctl is-active --quiet xray.service; then
-  echo "ERROR: xray.service is not active after installation." >&2
-  systemctl --no-pager --full status xray.service || true
-  journalctl -u xray.service -n 80 --no-pager || true
-  exit 1
-fi
-systemctl --no-pager --full status xray.service
+systemctl restart xray.service
+systemctl --no-pager --full status xray.service || true
 
 # Install Trojan Go
 latest_version="$(curl -s "https://api.github.com/repos/p4gefau1t/trojan-go/releases" | grep tag_name | sed -E 's/.*"v(.*)".*/\1/' | head -n 1)"
