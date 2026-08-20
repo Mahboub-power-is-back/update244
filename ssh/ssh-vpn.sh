@@ -195,20 +195,11 @@ truncate -s 0 /etc/squid/squid.conf
 wget -O /etc/squid/squid.conf "https://${akbarvpn}/squid3.conf"
 sed -i $MYIP2 /etc/squid/squid.conf
 
-# Install SSLH
-# Public WebSocket ports
-for p in 80 443; do
-  iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$p" -j ACCEPT
-done
-iptables-save > /etc/iptables.up.rules
-netfilter-persistent save >/dev/null 2>&1 || true
-# SSLH is intentionally disabled. Public 80/443 are owned by Nginx,
-# which multiplexes Xray, Trojan-Go, SSH-WS and OpenVPN-WS by WebSocket path.
+# SSLH is no longer the public 443 listener.
+# nginx is the single public 80/443 multiplexer for Xray/SSH-WS/OVPN-WS/Trojan-Go.
 apt -y install sslh
 systemctl disable --now sslh 2>/dev/null || true
 rm -f /etc/default/sslh
-rm -f /etc/systemd/system/sslh1.service
-systemctl daemon-reload
 
 # setting vnstat
 apt -y install vnstat
@@ -248,7 +239,7 @@ connect = 127.0.0.1:109
 
 [openssh]
 accept = 777
-connect = 127.0.0.1:10007
+connect = 127.0.0.1:8880
 
 [openvpn]
 accept = 990
@@ -543,6 +534,7 @@ chown -R www-data:www-data /home/vps/public_html
 /etc/init.d/ssh restart
 /etc/init.d/dropbear restart
 /etc/init.d/fail2ban restart
+systemctl stop sslh 2>/dev/null || true
 /etc/init.d/stunnel5 restart
 /etc/init.d/vnstat restart
 /etc/init.d/fail2ban restart

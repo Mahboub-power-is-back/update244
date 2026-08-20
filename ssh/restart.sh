@@ -19,7 +19,6 @@ systemctl restart ssrmu
 systemctl restart ws-tls
 systemctl restart ws-nontls
 systemctl restart xray.service
-systemctl restart nginx
 systemctl restart shadowsocks-libev
 systemctl restart xl2tpd
 systemctl restart pptpd
@@ -34,6 +33,7 @@ systemctl restart trojan-go
 /etc/init.d/ssrmu restart
 /etc/init.d/ssh restart
 /etc/init.d/dropbear restart
+systemctl reload nginx
 /etc/init.d/stunnel5 restart
 /etc/init.d/openvpn restart
 /etc/init.d/fail2ban restart
