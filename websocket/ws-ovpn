@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import socket
 import threading
 import select
@@ -8,7 +8,7 @@ import getopt
 
 # Listen
 LISTENING_ADDR = '0.0.0.0'
-LISTENING_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8880
+LISTENING_PORT = 10086
 
 # Pass
 PASS = ''
@@ -17,7 +17,7 @@ PASS = ''
 BUFLEN = 4096 * 4
 TIMEOUT = 60
 DEFAULT_HOST = '127.0.0.1:1194'
-RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\n\r\nContent-Length: 104857600000\r\n\r\n'
+RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n'
 
 
 class Server(threading.Thread):
@@ -70,7 +70,8 @@ class Server(threading.Thread):
     def close(self):
         self.running = False
         with self.threadsLock:
-            for c in list(self.threads):
+            threads = list(self.threads)
+            for c in threads:
                 c.close()
 
 
@@ -107,6 +108,7 @@ class ConnectionHandler(threading.Thread):
         try:
             self.client_buffer = self.client.recv(BUFLEN)
             hostPort = self.findHeader(self.client_buffer, b'X-Real-Host')
+
             if not hostPort:
                 hostPort = DEFAULT_HOST
 
@@ -116,6 +118,7 @@ class ConnectionHandler(threading.Thread):
 
             if hostPort:
                 passwd = self.findHeader(self.client_buffer, b'X-Pass')
+
                 if PASS and passwd == PASS:
                     self.method_CONNECT(hostPort)
                 elif PASS and passwd != PASS:
@@ -129,33 +132,36 @@ class ConnectionHandler(threading.Thread):
                 self.client.send(b'HTTP/1.1 400 NoXRealHost!\r\n\r\n')
 
         except Exception as e:
-            self.log += ' - error: ' + str(e)
+            self.log += f' - error: {str(e)}'
             self.server.printLog(self.log)
         finally:
             self.close()
             self.server.removeConn(self)
 
     def findHeader(self, head, header):
-        idx = head.find(header + b': ')
-        if idx == -1:
+        try:
+            start = head.find(header + b': ')
+            if start == -1:
+                return b''
+            start = head.find(b':', start)
+            head = head[start + 2:]
+            end = head.find(b'\r\n')
+            if end == -1:
+                return b''
+            return head[:end]
+        except:
             return b''
-        start = head.find(b':', idx) + 2
-        end = head.find(b'\r\n', start)
-        if end == -1:
-            return b''
-        return head[start:end].decode(errors='ignore')
 
     def connect_target(self, host):
+        host = host.decode() if isinstance(host, bytes) else host
         if ':' in host:
-            host_split = host.split(':')
-            host, port = host_split[0], int(host_split[1])
+            host_name, port = host.split(':')
+            port = int(port)
         else:
+            host_name = host
             port = 443
-
-        info = socket.getaddrinfo(host, port)[0]
-        self.target = socket.socket(info[0], info[1], info[2])
+        self.target = socket.create_connection((host_name, port))
         self.targetClosed = False
-        self.target.connect(info[4])
 
     def method_CONNECT(self, path):
         self.log += f' - CONNECT {path}'
@@ -173,22 +179,27 @@ class ConnectionHandler(threading.Thread):
             count += 1
             try:
                 recv, _, err = select.select(socs, [], socs, 3)
-                if err:
-                    error = True
-                for s in recv:
-                    data = s.recv(BUFLEN)
-                    if data:
-                        if s is self.target:
-                            self.client.send(data)
-                        else:
-                            while data:
-                                sent = self.target.send(data)
-                                data = data[sent:]
-                        count = 0
-                    else:
-                        break
             except:
+                break
+            if err:
                 error = True
+            if recv:
+                for in_ in recv:
+                    try:
+                        data = in_.recv(BUFLEN)
+                        if data:
+                            if in_ is self.target:
+                                self.client.send(data)
+                            else:
+                                while data:
+                                    sent = self.target.send(data)
+                                    data = data[sent:]
+                            count = 0
+                        else:
+                            break
+                    except:
+                        error = True
+                        break
             if count == TIMEOUT or error:
                 break
 
@@ -203,12 +214,12 @@ def parse_args(argv):
     global LISTENING_ADDR
     global LISTENING_PORT
     try:
-        opts, _ = getopt.getopt(argv, "hb:p:", ["bind=", "port="])
+        opts, args = getopt.getopt(argv, "hb:p:", ["bind=", "port="])
     except getopt.GetoptError:
         print_usage()
         sys.exit(2)
     for opt, arg in opts:
-        if opt == '-h':
+        if opt in ("-h", "--help"):
             print_usage()
             sys.exit()
         elif opt in ("-b", "--bind"):
@@ -217,12 +228,13 @@ def parse_args(argv):
             LISTENING_PORT = int(arg)
 
 
-def main(host=LISTENING_ADDR, port=LISTENING_PORT):
+def main():
+    parse_args(sys.argv[1:])
     print("\n:-------PythonProxy-------:\n")
-    print("Listening addr: " + LISTENING_ADDR)
-    print("Listening port: " + str(LISTENING_PORT) + "\n")
+    print(f"Listening addr: {LISTENING_ADDR}")
+    print(f"Listening port: {LISTENING_PORT}\n")
     print(":-------------------------:\n")
-    server = Server(host, port)
+    server = Server(LISTENING_ADDR, LISTENING_PORT)
     server.start()
     try:
         while True:
@@ -233,5 +245,4 @@ def main(host=LISTENING_ADDR, port=LISTENING_PORT):
 
 
 if __name__ == '__main__':
-    parse_args(sys.argv[1:])
     main()

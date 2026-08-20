@@ -2,7 +2,7 @@
 import socket, threading, select, sys, time, getopt
 
 # Listen
-LISTENING_ADDR = '127.0.0.1'
+LISTENING_ADDR = '0.0.0.0'
 LISTENING_PORT = int(sys.argv[1])
 
 # Pass
@@ -11,8 +11,8 @@ PASS = ''
 # CONST
 BUFLEN = 4096 * 4
 TIMEOUT = 60
-DEFAULT_HOST = '127.0.0.1:109'
-RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\n\r\nContent-Length: 104857600000\r\n\r\n'
+DEFAULT_HOST = '127.0.0.1:22'
+RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n'
 
 class Server(threading.Thread):
     def __init__(self, host, port):
@@ -101,6 +101,7 @@ class ConnectionHandler(threading.Thread):
             self.client_buffer = self.client.recv(BUFLEN)
             hostPort = self.findHeader(self.client_buffer, b'X-Real-Host')
 
+            # nginx supplies this header; fall back safely if a client/proxy omits it.
             if not hostPort:
                 hostPort = DEFAULT_HOST
 
@@ -129,15 +130,17 @@ class ConnectionHandler(threading.Thread):
             self.server.removeConn(self)
 
     def findHeader(self, head, header):
-        aux = head.find(header + b': ')
-        if aux == -1:
-            return b''
-        aux = head.find(b':', aux)
-        head = head[aux+2:]
-        aux = head.find(b'\r\n')
-        if aux == -1:
-            return b''
-        return head[:aux]
+        try:
+            text = head.decode("iso-8859-1", errors="ignore")
+            wanted = header.lower()
+            for line in text.splitlines():
+                if ":" in line:
+                    name, value = line.split(":", 1)
+                    if name.strip().lower() == wanted:
+                        return value.strip().encode("iso-8859-1")
+        except Exception:
+            pass
+        return b""
 
     def connect_target(self, host):
         if ':' in host:

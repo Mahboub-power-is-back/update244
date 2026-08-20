@@ -7,8 +7,8 @@ import time
 import getopt
 
 # Listen
-LISTENING_ADDR = '127.0.0.1'
-LISTENING_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8880
+LISTENING_ADDR = '0.0.0.0'
+LISTENING_PORT = 10086
 
 # Pass
 PASS = ''
@@ -17,7 +17,7 @@ PASS = ''
 BUFLEN = 4096 * 4
 TIMEOUT = 60
 DEFAULT_HOST = '127.0.0.1:1194'
-RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\n\r\nContent-Length: 104857600000\r\n\r\n'
+RESPONSE = b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n'
 
 
 class Server(threading.Thread):
