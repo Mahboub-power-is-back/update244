@@ -1,279 +1,568 @@
 #!/bin/bash
-# ============================================================
-# AKBAR VPN - SSH / VPN / WEBSOCKET INSTALLER (CORRECTED)
-#
-# This script deliberately does NOT bind sslh to 443.
-# Port 443 belongs to Xray's multiplexer.
-#
-# Public:
-#   80/443/8443 -> Xray/Nginx multiplexing
-#   SSH WS      -> /ssh on 80/443/8443
-#   OVPN WS     -> /ovpn-ws on 80/443/8443
-#
-# Internal:
-#   SSH WS       -> 8880
-#   OVPN WS      -> 2086
-#
-# Other services:
-#   OpenSSH      -> 22
-#   Dropbear     -> 109,143
-#   OpenVPN      -> 1194 TCP, 2200 UDP, 990 TCP
-#   Squid        -> 3128
-#   Nginx panel  -> 89 (optional legacy panel)
-# ============================================================
+# ==========================================
+# Color
+RED='\033[0;31m'
+NC='\033[0m'
+GREEN='\033[0;32m'
+ORANGE='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+LIGHT='\033[0;37m'
+# ==========================================
+# Getting
+MYIP=$(wget -qO- ipinfo.io/ip);
+# ==================================================
+# Link Hosting Kalian
+akbarvpn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/ssh"
 
-set -Eeuo pipefail
-IFS=$'\n\t'
+# Link Hosting Kalian Untuk Xray
+akbarvpnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/xray"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; NC='\033[0m'
+# Link Hosting Kalian Untuk Trojan Go
+akbarvpnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/trojango"
 
-info(){ echo -e "${BLUE}[INFO]${NC} $*"; }
-ok(){ echo -e "${GREEN}[OK]${NC} $*"; }
-warn(){ echo -e "${YELLOW}[WARN]${NC} $*"; }
-die(){ echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+# Link Hosting Kalian Untuk Stunnel5
+akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/stunnel5"
 
-[ "$EUID" -eq 0 ] || die "Run as root."
-. /etc/os-release
-case "${ID:-}" in ubuntu|debian) ;; *) die "Ubuntu/Debian only." ;; esac
-
+# initializing var
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y openssh-server dropbear openvpn nginx python3 python3-venv \
-  squid curl wget unzip iptables iptables-persistent fail2ban
+MYIP=$(wget -qO- ipinfo.io/ip);
+MYIP2="s/xxxxxxxxx/$MYIP/g";
+NET=$(ip -o $ANU -4 route show to default | awk '{print $5}');
+source /etc/os-release
+ver=$VERSION_ID
 
-# ------------------------------------------------------------
-# SSH / Dropbear
-# ------------------------------------------------------------
-systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
+#detail nama perusahaan
+country=TN
+state=Tunisia
+locality=Tunisia
+organization=sslhtunnelmax.com
+organizationalunit=sslhtunnelmax.com
+commonname=sslhtunnelmax.com
+email=vpsplus90@gmail.com
 
-mkdir -p /etc/dropbear
-if [ -f /etc/default/dropbear ]; then
-  sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear || true
-  sed -i 's/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/' /etc/default/dropbear || true
-  grep -q '^DROPBEAR_EXTRA_ARGS=' /etc/default/dropbear \
-    && sed -i 's|^DROPBEAR_EXTRA_ARGS=.*|DROPBEAR_EXTRA_ARGS="-p 143"|' /etc/default/dropbear \
-    || echo 'DROPBEAR_EXTRA_ARGS="-p 143"' >> /etc/default/dropbear
-fi
-systemctl enable dropbear 2>/dev/null || true
-systemctl restart dropbear 2>/dev/null || warn "Dropbear is not running; continuing with OpenSSH/WS."
+# simple password minimal
+wget -O /etc/pam.d/common-password "https://${akbarvpn}/password"
+chmod +x /etc/pam.d/common-password
 
-# ------------------------------------------------------------
-# WebSocket helper scripts
-# ------------------------------------------------------------
-cat > /usr/local/bin/ws-nontls <<'PY'
-#!/usr/bin/env python3
-import socket,select,sys,threading
-PORT=int(sys.argv[1]) if len(sys.argv)>1 else 8880
-TARGET_DEFAULT="127.0.0.1:22"
-BUF=16384
-def header(data,name):
-    try:
-        for line in data.decode("latin1","ignore").split("\r\n"):
-            if line.lower().startswith(name.lower()+":"):
-                return line.split(":",1)[1].strip()
-    except Exception:
-        pass
-    return ""
-def relay(a,b):
-    socks=[a,b]
-    try:
-        while True:
-            r,_,e=select.select(socks,[],socks,60)
-            if e or not r: return
-            for s in r:
-                d=s.recv(BUF)
-                if not d: return
-                (b if s is a else a).sendall(d)
-    except Exception:
-        return
-def client(c):
-    try:
-        d=c.recv(BUF)
-        target=header(d,"X-Real-Host") or TARGET_DEFAULT
-        host,port=(target.rsplit(":",1)+[""])[:2] if ":" in target else (target,"22")
-        if host not in ("127.0.0.1","localhost"):
-            c.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\n"); return
-        s=socket.create_connection((host,int(port)),5)
-        c.sendall(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
-        relay(c,s)
-    except Exception:
-        pass
-    finally:
-        try:c.close()
-        except:pass
-def main():
-    s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-    s.bind(("127.0.0.1",PORT)); s.listen(256)
-    while True:
-        c,_=s.accept(); threading.Thread(target=client,args=(c,),daemon=True).start()
-if __name__=="__main__": main()
-PY
-chmod 755 /usr/local/bin/ws-nontls
+# go to root
+cd
 
-cat > /usr/local/bin/ws-ovpn <<'PY'
-#!/usr/bin/env python3
-import socket,select,sys,threading
-PORT=int(sys.argv[1]) if len(sys.argv)>1 else 2086
-TARGET=("127.0.0.1",1194)
-BUF=16384
-def relay(a,b):
-    try:
-        while True:
-            r,_,e=select.select([a,b],[],[a,b],60)
-            if e or not r:return
-            for s in r:
-                d=s.recv(BUF)
-                if not d:return
-                (b if s is a else a).sendall(d)
-    except:pass
-def client(c):
-    try:
-        d=c.recv(BUF)
-        s=socket.create_connection(TARGET,5)
-        c.sendall(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
-        relay(c,s)
-    except:pass
-    finally:
-        try:c.close()
-        except:pass
-def main():
-    s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-    s.bind(("127.0.0.1",PORT)); s.listen(256)
-    while True:
-        c,_=s.accept();threading.Thread(target=client,args=(c,),daemon=True).start()
-if __name__=="__main__":main()
-PY
-chmod 755 /usr/local/bin/ws-ovpn
-
-cat > /etc/systemd/system/ws-nontls.service <<'EOF'
+# Edit file /etc/systemd/system/rc-local.service
+cat > /etc/systemd/system/rc-local.service <<-END
 [Unit]
-Description=SSH WebSocket backend
-After=network.target
-
+Description=/etc/rc.local
+ConditionPathExists=/etc/rc.local
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/bin/ws-nontls 8880
-Restart=always
-RestartSec=2
-
+Type=forking
+ExecStart=/etc/rc.local start
+TimeoutSec=0
+StandardOutput=tty
+RemainAfterExit=yes
+SysVStartPriority=99
 [Install]
 WantedBy=multi-user.target
-EOF
+END
 
-cat > /etc/systemd/system/ws-ovpn.service <<'EOF'
-[Unit]
-Description=OpenVPN WebSocket backend
-After=network.target
+# nano /etc/rc.local
+cat > /etc/rc.local <<-END
+#!/bin/sh -e
+# rc.local
+# By default this script does nothing.
+exit 0
+END
 
-[Service]
-ExecStart=/usr/bin/python3 /usr/local/bin/ws-ovpn 2086
-Restart=always
-RestartSec=2
+# Ubah izin akses
+chmod +x /etc/rc.local
 
-[Install]
-WantedBy=multi-user.target
-EOF
+# enable rc local
+systemctl enable rc-local
+systemctl start rc-local.service
 
-systemctl daemon-reload
-systemctl enable --now ws-nontls ws-ovpn
+# disable ipv6
+echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
+sed -i '$ i\echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6' /etc/rc.local
 
-# ------------------------------------------------------------
-# Nginx: internal HTTP/WebSocket router. Public 80 is reached through HAProxy;
-# public 443/8443 are reached through Xray fallbacks. Never bind public 443.
-# ------------------------------------------------------------
+#update
+sudo apt update -y
+sudo apt upgrade -y
+sudo apt dist-upgrade -y
+sudo apt-get remove --purge ufw firewalld -y
+sudo apt-get remove --purge exim4 -y
+
+# install wget and curl
+sudo apt -y install wget curl
+
+# Install Requirements Tools
+sudo apt install ruby -y
+sudo apt install python -y
+sudo apt install make -y
+sudo apt install cmake -y
+sudo apt install coreutils -y
+sudo apt install rsyslog -y
+sudo apt install net-tools -y
+sudo apt install zip -y
+sudo apt install unzip -y
+sudo apt install nano -y
+sudo apt install sed -y
+sudo apt install gnupg -y
+sudo apt install gnupg1 -y
+sudo apt install bc -y
+sudo apt install jq -y
+sudo apt install apt-transport-https -y
+sudo apt install build-essential -y
+sudo apt install dirmngr -y
+sudo apt install libxml-parser-perl -y
+sudo apt install neofetch -y
+sudo apt install git -y
+sudo apt install lsof -y
+sudo apt install libsqlite3-dev -y
+sudo apt install libz-dev -y
+sudo apt install gcc -y
+sudo apt install g++ -y
+sudo apt install libreadline-dev -y
+sudo apt install zlib1g-dev -y
+sudo apt install libssl-dev -y
+sudo apt install libssl1.0-dev -y
+sudo apt install dos2unix -y
+apt install -y libpcre3-dev
+
+# set time GMT +7
+ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
+
+# set locale
+sed -i 's/AcceptEnv/#AcceptEnv/g' /etc/ssh/sshd_config
+
+# install
+sudo apt-get --reinstall --fix-missing install -y bzip2 gzip coreutils wget screen rsyslog iftop htop net-tools zip unzip wget net-tools curl nano sed screen gnupg gnupg1 bc apt-transport-https build-essential dirmngr libxml-parser-perl neofetch git lsof
+echo "clear" >> .profile
+echo "neofetch" >> .profile
+
+# install webserver
+sudo apt -y install nginx php php-fpm php-cli php-mysql libxml-parser-perl
+rm /etc/nginx/sites-enabled/default
+rm /etc/nginx/sites-available/default
+curl https://${akbarvpn}/nginx.conf > /etc/nginx/nginx.conf
+curl https://${akbarvpn}/vps.conf > /etc/nginx/conf.d/vps.conf
+sed -i 's/listen = \/var\/run\/php-fpm.sock/listen = 127.0.0.1:9000/g' /etc/php/fpm/pool.d/www.conf
+useradd -m vps;
 mkdir -p /home/vps/public_html
-if ! id vps >/dev/null 2>&1; then useradd -m vps; fi
+echo "<?php phpinfo() ?>" > /home/vps/public_html/info.php
 chown -R www-data:www-data /home/vps/public_html
+chmod -R g+rw /home/vps/public_html
+cd /home/vps/public_html
+wget -O /home/vps/public_html/index.html "https://${akbarvpn}/index.html1"
+/etc/init.d/nginx restart
+cd
 
-cat > /home/vps/public_html/index.html <<'EOF'
-<!doctype html><html><head><meta charset="utf-8"><title>Welcome</title></head>
-<body><h1>Welcome</h1></body></html>
+# install badvpn
+cd
+wget -O /usr/bin/badvpn-udpgw "https://${akbarvpn}/badvpn-udpgw64"
+chmod +x /usr/bin/badvpn-udpgw
+sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500' /etc/rc.local
+sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500' /etc/rc.local
+sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500' /etc/rc.local
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7400 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7500 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7600 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7700 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7800 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
+
+# setting port ssh
+sed -i 's/Port 22/Port 22/g' /etc/ssh/sshd_config
+
+# install dropbear
+sudo apt -y install dropbear
+sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
+sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
+sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 109 -p 143"/g' /etc/default/dropbear
+sed -i 's|ExecStart=.*|ExecStart=/usr/sbin/dropbear -EF -p 143 -p 109|g' /usr/lib/systemd/system/dropbear.service
+systemctl daemon-reload
+systemctl restart dropbear
+echo "/bin/false" >> /etc/shells
+echo "/usr/sbin/nologin" >> /etc/shells
+/etc/init.d/dropbear restart
+
+# install squid
+cd
+sudo apt -y install squid
+truncate -s 0 /etc/squid/squid.conf
+wget -O /etc/squid/squid.conf "https://${akbarvpn}/squid3.conf"
+sed -i $MYIP2 /etc/squid/squid.conf
+
+# Install SSLH
+# Public WebSocket ports
+for p in 80 443; do
+  iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$p" -j ACCEPT
+done
+iptables-save > /etc/iptables.up.rules
+netfilter-persistent save >/dev/null 2>&1 || true
+# SSLH is intentionally disabled. Public 80/443 are owned by Nginx,
+# which multiplexes Xray, Trojan-Go, SSH-WS and OpenVPN-WS by WebSocket path.
+apt -y install sslh
+systemctl disable --now sslh 2>/dev/null || true
+rm -f /etc/default/sslh
+rm -f /etc/systemd/system/sslh1.service
+systemctl daemon-reload
+
+# setting vnstat
+apt -y install vnstat
+/etc/init.d/vnstat restart
+sudo apt -y install libsqlite3-dev
+wget https://humdi.net/vnstat/vnstat-2.6.tar.gz
+tar zxvf vnstat-2.6.tar.gz
+cd vnstat-2.6
+./configure --prefix=/usr --sysconfdir=/etc && make && make install
+cd
+vnstat -u -i $NET
+sed -i 's/Interface "'""eth0""'"/Interface "'""$NET""'"/g' /etc/vnstat.conf
+chown vnstat:vnstat /var/lib/vnstat -R
+systemctl enable vnstat
+/etc/init.d/vnstat restart
+rm -f /root/vnstat-2.6.tar.gz
+rm -rf /root/vnstat-2.6
+
+# install stunnel 5 
+cd /root/
+apt update
+apt install -y stunnel4
+mkdir -p /etc/stunnel5
+# Download Config Stunnel5
+cat > /etc/stunnel5/stunnel5.conf <<-END
+foreground = no
+cert = /etc/xray/xray.crt
+key = /etc/xray/xray.key
+client = no
+socket = a:SO_REUSEADDR=1
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+
+[dropbear]
+accept = 445
+connect = 127.0.0.1:109
+
+[openssh]
+accept = 777
+connect = 127.0.0.1:10007
+
+[openvpn]
+accept = 990
+connect = 127.0.0.1:1194
+
+END
+
+# make a certificate
+#openssl genrsa -out key.pem 2048
+#openssl req -new -x509 -key key.pem -out cert.pem -days 1095 \
+#-subj "/C=$country/ST=$state/L=$locality/O=$organization/OU=$organizationalunit/CN=$commonname/emailAddress=$email"
+#cat key.pem cert.pem >> /etc/stunnel5/stunnel5.pem
+
+# Service Stunnel5 systemctl restart stunnel5
+cat > /etc/systemd/system/stunnel5.service << END
+[Unit]
+Description=Stunnel5 Service
+Documentation=https://stunnel.org
+Documentation=https://github.com/Akbar218
+After=syslog.target network-online.target
+
+[Service]
+ExecStart=/usr/bin/stunnel /etc/stunnel5/stunnel5.conf
+Type=forking
+
+[Install]
+WantedBy=multi-user.target
+END
+
+# Service Stunnel5 /etc/init.d/stunnel5
+wget -q -O /etc/init.d/stunnel5 "https://${akbarvpnnnn}/stunnel5.init"
+
+# Ubah Izin Akses
+chmod 600 /etc/stunnel5/stunnel5.pem
+chmod +x /etc/init.d/stunnel5
+cp /usr/local/bin/stunnel /usr/local/bin/stunnel5
+
+# Remove File
+rm -r -f /usr/local/share/doc/stunnel/
+rm -r -f /usr/local/etc/stunnel/
+rm -f /usr/local/bin/stunnel
+rm -f /usr/local/bin/stunnel3
+rm -f /usr/local/bin/stunnel4
+#rm -f /usr/local/bin/stunnel5
+
+# Restart Stunnel 5
+systemctl stop stunnel5
+systemctl enable stunnel5
+systemctl start stunnel5
+systemctl restart stunnel5
+/etc/init.d/stunnel5 restart
+/etc/init.d/stunnel5 status
+/etc/init.d/stunnel5 restart
+
+#OpenVPN
+wget https://${akbarvpn}/vpn.sh &&  chmod +x vpn.sh && ./vpn.sh
+
+# install fail2ban
+sudo apt -y install fail2ban
+
+# Instal DDOS Flate
+if [ -d '/usr/local/ddos' ]; then
+	echo; echo; echo "Please un-install the previous version first"
+	exit 0
+else
+	mkdir /usr/local/ddos
+fi
+clear
+echo; echo 'Installing DOS-Deflate 0.6'; echo
+echo; echo -n 'Downloading source files...'
+wget -q -O /usr/local/ddos/ddos.conf http://www.inetbase.com/scripts/ddos/ddos.conf
+echo -n '.'
+wget -q -O /usr/local/ddos/LICENSE http://www.inetbase.com/scripts/ddos/LICENSE
+echo -n '.'
+wget -q -O /usr/local/ddos/ignore.ip.list http://www.inetbase.com/scripts/ddos/ignore.ip.list
+echo -n '.'
+wget -q -O /usr/local/ddos/ddos.sh http://www.inetbase.com/scripts/ddos/ddos.sh
+chmod 0755 /usr/local/ddos/ddos.sh
+cp -s /usr/local/ddos/ddos.sh /usr/local/sbin/ddos
+echo '...done'
+echo; echo -n 'Creating cron to run script every minute.....(Default setting)'
+/usr/local/ddos/ddos.sh --cron > /dev/null 2>&1
+echo '.....done'
+echo; echo 'Installation has completed.'
+echo 'Config file is at /usr/local/ddos/ddos.conf'
+echo 'Please send in your comments and/or suggestions to zaf@vsnl.com'
+
+# banner /etc/issue.net
+echo "Banner /etc/issue.net" >>/etc/ssh/sshd_config
+sed -i 's@DROPBEAR_BANNER=""@DROPBEAR_BANNER="/etc/issue.net"@g' /etc/default/dropbear
+
+# Install BBR
+wget https://${akbarvpn}/bbr.sh && chmod +x bbr.sh && ./bbr.sh
+
+# Ganti Banner
+wget -O /etc/issue.net "https://${akbarvpn}/issue.net"
+
+# blockir torrent
+iptables -A FORWARD -m string --string "get_peers" --algo bm -j DROP
+iptables -A FORWARD -m string --string "announce_peer" --algo bm -j DROP
+iptables -A FORWARD -m string --string "find_node" --algo bm -j DROP
+iptables -A FORWARD -m string --algo bm --string "BitTorrent" -j DROP
+iptables -A FORWARD -m string --algo bm --string "BitTorrent protocol" -j DROP
+iptables -A FORWARD -m string --algo bm --string "peer_id=" -j DROP
+iptables -A FORWARD -m string --algo bm --string ".torrent" -j DROP
+iptables -A FORWARD -m string --algo bm --string "announce.php?passkey=" -j DROP
+iptables -A FORWARD -m string --algo bm --string "torrent" -j DROP
+iptables -A FORWARD -m string --algo bm --string "announce" -j DROP
+iptables -A FORWARD -m string --algo bm --string "info_hash" -j DROP
+iptables-save > /etc/iptables.up.rules
+iptables-restore -t < /etc/iptables.up.rules
+netfilter-persistent save
+netfilter-persistent reload
+#install udp
+mkdir -p /root/udp
+cd /root/udp
+wget https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/udp-custom-linux-amd64
+chmod +x /root/udp/udp-custom-linux-amd64
+sudo cat > /etc/systemd/system/udpcustom.service <<'EOF'
+[Unit]
+Description=UDP Custom by ePro Dev. Team
+After=network.target
+
+[Service]
+User=root
+Type=simple
+ExecStart=/root/udp/udp-custom-linux-amd64 server
+WorkingDirectory=/root/udp/
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
-rm -f /etc/nginx/sites-enabled/default
-cat > /etc/nginx/conf.d/ssh-vpn.conf <<'EOF'
-server {
-    listen 127.0.0.1:8080;
-    server_name _;
-
-    root /home/vps/public_html;
-    index index.html;
-
-    location /ssh {
-        proxy_pass http://127.0.0.1:8880;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-    }
-
-    location /ovpn-ws {
-        proxy_pass http://127.0.0.1:2086;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-    }
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
+sudo cat > /root/udp/config.json <<'EOF'
+{
+  "listen": ":36712",
+  "stream_buffer": 33554432,
+  "receive_buffer": 83886080,
+  "auth": {
+    "mode": "passwords"
+  }
 }
 EOF
+sudo systemctl daemon-reload
+sudo systemctl enable udpcustom.service
+sudo systemctl start udpcustom.service
 
-nginx -t
-systemctl enable nginx
-systemctl restart nginx
+# download script
+cd /usr/bin
+wget -O addhost "https://${akbarvpn}/addhost.sh"
+wget -O about "https://${akbarvpn}/about.sh"
+wget -O menu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/menu.sh"
+wget -O addssh "https://${akbarvpn}/addssh.sh"
+wget -O trialssh "https://${akbarvpn}/trialssh.sh"
+wget -O delssh "https://${akbarvpn}/delssh.sh"
+wget -O member "https://${akbarvpn}/member.sh"
+wget -O delexp "https://${akbarvpn}/delexp.sh"
+wget -O cekssh "https://${akbarvpn}/cekssh.sh"
+wget -O restart "https://${akbarvpn}/restart.sh"
+wget -O speedtest "https://${akbarvpn}/speedtest_cli.py"
+wget -O info "https://${akbarvpn}/info.sh"
+wget -O ram "https://${akbarvpn}/ram.sh"
+wget -O renewssh "https://${akbarvpn}/renewssh.sh"
+wget -O autokill "https://${akbarvpn}/autokill.sh"
+wget -O ceklim "https://${akbarvpn}/ceklim.sh"
+wget -O tendang "https://${akbarvpn}/tendang.sh"
+wget -O clearlog "https://${akbarvpn}/clearlog.sh"
+wget -O changeport "https://${akbarvpn}/changeport.sh"
+wget -O portovpn "https://${akbarvpn}/portovpn.sh"
+wget -O portwg "https://${akbarvpn}/portwg.sh"
+wget -O porttrojan "https://${akbarvpn}/porttrojan.sh"
+wget -O portsstp "https://${akbarvpn}/portsstp.sh"
+wget -O portsquid "https://${akbarvpn}/portsquid.sh"
+wget -O portvlm "https://${akbarvpn}/portvlm.sh"
+wget -O wbmn "https://${akbarvpn}/webmin.sh"
+wget -O xp "https://${akbarvpn}/xp.sh"
+wget -O swapkvm "https://${akbarvpn}/swapkvm.sh"
+wget -O addvmess "https://${akbarvpnn}/addv2ray.sh"
+wget -O addvless "https://${akbarvpnn}/addvless.sh"
+wget -O addtrojan "https://${akbarvpnn}/addtrojan.sh"
+wget -O delvmess "https://${akbarvpnn}/delv2ray.sh"
+wget -O delvless "https://${akbarvpnn}/delvless.sh"
+wget -O deltrojan "https://${akbarvpnn}/deltrojan.sh"
+wget -O cekvmess "https://${akbarvpnn}/cekv2ray.sh"
+wget -O cekvless "https://${akbarvpnn}/cekvless.sh"
+wget -O cektrojan "https://${akbarvpnn}/cektrojan.sh"
+wget -O renewvmess "https://${akbarvpnn}/renewv2ray.sh"
+wget -O renewvless "https://${akbarvpnn}/renewvless.sh"
+wget -O renewtrojan "https://${akbarvpnn}/renewtrojan.sh"
+wget -O certv2ray "https://${akbarvpnn}/certv2ray.sh"
+wget -O addtrgo "https://${akbarvpnnn}/addtrgo.sh"
+wget -O deltrgo "https://${akbarvpnnn}/deltrgo.sh"
+wget -O renewtrgo "https://${akbarvpnnn}/renewtrgo.sh"
+wget -O cektrgo "https://${akbarvpnnn}/cektrgo.sh"
+wget -O portsshnontls "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshnontls.sh"
+wget -O portsshws "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshws.sh"
 
-# ------------------------------------------------------------
-# OpenVPN basic service if an existing config is present.
-# We do not overwrite an existing provider/client setup.
-# ------------------------------------------------------------
-systemctl enable openvpn 2>/dev/null || true
-systemctl restart openvpn 2>/dev/null || true
+wget -O sshovpnmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sshovpn.sh"
+wget -O l2tpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/l2tpmenu.sh"
+wget -O pptpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/pptpmenu.sh"
+wget -O sstpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sstpmenu.sh"
+wget -O wgmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/wgmenu.sh"
+wget -O ssmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/ssmenu.sh"
+wget -O ssrmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/ssrmenu.sh"
+wget -O vmessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/vmessmenu.sh"
+wget -O vlessmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/vlessmenu.sh"
+wget -O trmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/trmenu.sh"
+wget -O trgomenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/trgomenu.sh"
+wget -O setmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/setmenu.sh"
 
-# ------------------------------------------------------------
-# Squid: safe local default. Existing custom config is preserved.
-# ------------------------------------------------------------
-if [ ! -s /etc/squid/squid.conf ]; then
-cat > /etc/squid/squid.conf <<'EOF'
-http_port 3128
-acl localhost src 127.0.0.1/32
-acl localnet src 10.0.0.0/8
-acl localnet src 172.16.0.0/12
-acl localnet src 192.168.0.0/16
-http_access allow localhost
-http_access allow localnet
-http_access deny all
-EOF
-fi
-systemctl enable --now squid || true
 
-# ------------------------------------------------------------
-# Fail2ban
-# ------------------------------------------------------------
-systemctl enable --now fail2ban || true
+chmod +x portsshnontls
+chmod +x portsshws
 
-# ------------------------------------------------------------
-# Firewall. Do not open 443 for another daemon: Xray owns it.
-# ------------------------------------------------------------
-for p in 22 80 443 8443 89 109 143 990 1194 2086 2087 3128; do
-  iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null ||
-    iptables -I INPUT -p tcp --dport "$p" -j ACCEPT
-done
-iptables -C INPUT -p udp --dport 1194 -j ACCEPT 2>/dev/null ||
-  iptables -I INPUT -p udp --dport 1194 -j ACCEPT
-iptables -C INPUT -p udp --dport 2200 -j ACCEPT 2>/dev/null ||
-  iptables -I INPUT -p udp --dport 2200 -j ACCEPT
-iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+chmod +x sshovpnmenu
+chmod +x l2tpmenu
+chmod +x pptpmenu
+chmod +x sstpmenu
+chmod +x wgmenu
+chmod +x ssmenu
+chmod +x ssrmenu
+chmod +x vmessmenu
+chmod +x vlessmenu
+chmod +x trmenu
+chmod +x trgomenu
+chmod +x setmenu
 
-echo
-ok "SSH/VPN/WebSocket setup completed."
-echo "Public 80/443/8443 remain owned by the Xray/HAProxy multiplexing layer."
-echo "SSH WebSocket backend: 127.0.0.1:8880"
-echo "OpenVPN WebSocket backend: 127.0.0.1:2086"
-echo "Dropbear: 109,143"
-echo "OpenSSH: 22"
-echo
-echo "Check:"
-echo "  ss -lntup | grep -E ':(80|443|8443|89|109|143|2086|2087)\\b'"
+chmod +x addhost
+chmod +x menu
+chmod +x addssh
+chmod +x trialssh
+chmod +x delssh
+chmod +x member
+chmod +x delexp
+chmod +x cekssh
+chmod +x restart
+chmod +x speedtest
+chmod +x info
+chmod +x about
+chmod +x autokill
+chmod +x tendang
+chmod +x ceklim
+chmod +x ram
+chmod +x renewssh
+chmod +x clearlog
+chmod +x changeport
+chmod +x portovpn
+chmod +x portwg
+chmod +x porttrojan
+chmod +x portsstp
+chmod +x portsquid
+chmod +x portvlm
+chmod +x wbmn
+chmod +x xp
+chmod +x swapkvm
+chmod +x addvmess
+chmod +x addvless
+chmod +x addtrojan
+chmod +x delvmess
+chmod +x delvless
+chmod +x deltrojan
+chmod +x cekvmess
+chmod +x cekvless
+chmod +x cektrojan
+chmod +x renewvmess
+chmod +x renewvless
+chmod +x renewtrojan
+chmod +x certv2ray
+chmod +x addtrgo
+chmod +x deltrgo
+chmod +x renewtrgo
+chmod +x cektrgo
+echo "0 5 * * * root clearlog && reboot" >> /etc/crontab
+echo "0 0 * * * root xp" >> /etc/crontab
+# remove unnecessary files
+cd
+sudo apt autoclean -y
+sudo apt -y remove --purge unscd
+sudo apt-get -y --purge remove samba*;
+sudo apt-get -y --purge remove apache2*;
+sudo apt-get -y --purge remove bind9*;
+sudo apt-get -y remove sendmail*
+sudo apt autoremove -y
+# finishing
+cd
+chown -R www-data:www-data /home/vps/public_html
+/etc/init.d/nginx restart
+/etc/init.d/openvpn restart
+/etc/init.d/cron restart
+/etc/init.d/ssh restart
+/etc/init.d/dropbear restart
+/etc/init.d/fail2ban restart
+/etc/init.d/stunnel5 restart
+/etc/init.d/vnstat restart
+/etc/init.d/fail2ban restart
+/etc/init.d/squid restart
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7400 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7500 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7600 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7700 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7800 --max-clients 500
+screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
+history -c
+echo "unset HISTFILE" >> /etc/profile
+
+cd
+rm -f /root/key.pem
+rm -f /root/cert.pem
+rm -f /root/ssh-vpn.sh
+
+# finihsing
+clear
