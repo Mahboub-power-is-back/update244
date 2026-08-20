@@ -96,7 +96,7 @@ apt-get remove --purge -y ufw firewalld exim4 2>/dev/null || true
 # Packages required by the existing services. Packages that were removed from
 # newer Ubuntu releases (gnupg1, libssl1.0-dev, python) are intentionally not used.
 APT_PACKAGES=(
-  wget curl ca-certificates screen ruby make cmake coreutils rsyslog net-tools
+  wget curl ca-certificates screen ruby make cmake coreutils rsyslog net-tools iproute2 python3
   zip unzip nano sed gnupg bc jq apt-transport-https build-essential dirmngr
   libxml-parser-perl git lsof libsqlite3-dev libz-dev gcc g++ libreadline-dev
   zlib1g-dev libssl-dev dos2unix libpcre3-dev bzip2 gzip iftop htop
@@ -376,6 +376,7 @@ cd /usr/bin
 wget -O addhost "https://${akbarvpn}/addhost.sh"
 wget -O about "https://${akbarvpn}/about.sh"
 wget -O menu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/menu.sh"
+wget -O ui.sh "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/ui.sh"
 wget -O addssh "https://${akbarvpn}/addssh.sh"
 wget -O trialssh "https://${akbarvpn}/trialssh.sh"
 wget -O delssh "https://${akbarvpn}/delssh.sh"
@@ -453,6 +454,7 @@ chmod +x setmenu
 
 chmod +x addhost
 chmod +x menu
+chmod +x ui.sh
 chmod +x addssh
 chmod +x trialssh
 chmod +x delssh
