@@ -29,7 +29,7 @@ akbarvpnnnn="raw.githubusercontent.com/Mahboub-power-is-back/update244/main/stun
 export DEBIAN_FRONTEND=noninteractive
 MYIP=$(wget -qO- ipinfo.io/ip);
 MYIP2="s/xxxxxxxxx/$MYIP/g";
-NET=$(ip -o $ANU -4 route show to default | awk '{print $5}');
+NET=$(ip -o -4 route show to default 2>/dev/null | awk '{print $5; exit}');
 source /etc/os-release
 ver=$VERSION_ID
 
@@ -84,49 +84,30 @@ systemctl start rc-local.service
 echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
 sed -i '$ i\echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6' /etc/rc.local
 
-#update
-sudo apt update -y
-sudo apt upgrade -y
-sudo apt dist-upgrade -y
-sudo apt-get remove --purge ufw firewalld -y
-sudo apt-get remove --purge exim4 -y
+# Ubuntu/Debian package bootstrap (20.04+ / 22.04+ / 24.04+)
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+apt-get update -y
+apt-get -f install -y || true
 
-# install wget and curl
-sudo apt -y install wget curl
+# Do not run a full distribution upgrade here: it can restart/break VPN services.
+apt-get remove --purge -y ufw firewalld exim4 2>/dev/null || true
 
-# Install Requirements Tools
-sudo apt install ruby -y
-sudo apt install python -y
-sudo apt install make -y
-sudo apt install cmake -y
-sudo apt install coreutils -y
-sudo apt install rsyslog -y
-sudo apt install net-tools -y
-sudo apt install zip -y
-sudo apt install unzip -y
-sudo apt install nano -y
-sudo apt install sed -y
-sudo apt install gnupg -y
-sudo apt install gnupg1 -y
-sudo apt install bc -y
-sudo apt install jq -y
-sudo apt install apt-transport-https -y
-sudo apt install build-essential -y
-sudo apt install dirmngr -y
-sudo apt install libxml-parser-perl -y
-sudo apt install neofetch -y
-sudo apt install git -y
-sudo apt install lsof -y
-sudo apt install libsqlite3-dev -y
-sudo apt install libz-dev -y
-sudo apt install gcc -y
-sudo apt install g++ -y
-sudo apt install libreadline-dev -y
-sudo apt install zlib1g-dev -y
-sudo apt install libssl-dev -y
-sudo apt install libssl1.0-dev -y
-sudo apt install dos2unix -y
-apt install -y libpcre3-dev
+# Packages required by the existing services. Packages that were removed from
+# newer Ubuntu releases (gnupg1, libssl1.0-dev, python) are intentionally not used.
+APT_PACKAGES=(
+  wget curl ca-certificates screen ruby make cmake coreutils rsyslog net-tools
+  zip unzip nano sed gnupg bc jq apt-transport-https build-essential dirmngr
+  libxml-parser-perl git lsof libsqlite3-dev libz-dev gcc g++ libreadline-dev
+  zlib1g-dev libssl-dev dos2unix libpcre3-dev bzip2 gzip iftop htop
+)
+apt-get install -y "${APT_PACKAGES[@]}"
+
+# neofetch was removed from some newer Ubuntu repositories. Keep the menu
+# behaviour without making installation fail when it is unavailable.
+if apt-cache show neofetch >/dev/null 2>&1; then
+  apt-get install -y neofetch
+fi
 
 # set time GMT +7
 ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
@@ -135,17 +116,18 @@ ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
 sed -i 's/AcceptEnv/#AcceptEnv/g' /etc/ssh/sshd_config
 
 # install
-sudo apt-get --reinstall --fix-missing install -y bzip2 gzip coreutils wget screen rsyslog iftop htop net-tools zip unzip wget net-tools curl nano sed screen gnupg gnupg1 bc apt-transport-https build-essential dirmngr libxml-parser-perl neofetch git lsof
+# Legacy duplicate package reinstall removed; the consolidated package install above is enough.
+true
 echo "clear" >> .profile
-echo "neofetch" >> .profile
+if command -v neofetch >/dev/null 2>&1; then echo "neofetch" >> .profile; fi
 
 # install webserver
-sudo apt -y install nginx php php-fpm php-cli php-mysql libxml-parser-perl
+apt-get install -y nginx php php-fpm php-cli php-mysql libxml-parser-perl
 rm /etc/nginx/sites-enabled/default
 rm /etc/nginx/sites-available/default
 curl https://${akbarvpn}/nginx.conf > /etc/nginx/nginx.conf
 curl https://${akbarvpn}/vps.conf > /etc/nginx/conf.d/vps.conf
-sed -i 's/listen = \/var\/run\/php-fpm.sock/listen = 127.0.0.1:9000/g' /etc/php/fpm/pool.d/www.conf
+PHP_POOL=$(find /etc/php -path '*/fpm/pool.d/www.conf' -type f | head -n1); if [ -n "$PHP_POOL" ]; then sed -i 's#^listen = .*#listen = 127.0.0.1:9000#' "$PHP_POOL"; fi
 useradd -m vps;
 mkdir -p /home/vps/public_html
 echo "<?php phpinfo() ?>" > /home/vps/public_html/info.php
@@ -177,7 +159,7 @@ screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
 sed -i 's/Port 22/Port 22/g' /etc/ssh/sshd_config
 
 # install dropbear
-sudo apt -y install dropbear
+apt -y install dropbear
 sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
 sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
 sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 109 -p 143"/g' /etc/default/dropbear
@@ -190,7 +172,7 @@ echo "/usr/sbin/nologin" >> /etc/shells
 
 # install squid
 cd
-sudo apt -y install squid
+apt -y install squid
 truncate -s 0 /etc/squid/squid.conf
 wget -O /etc/squid/squid.conf "https://${akbarvpn}/squid3.conf"
 sed -i $MYIP2 /etc/squid/squid.conf
@@ -204,7 +186,7 @@ rm -f /etc/default/sslh
 # setting vnstat
 apt -y install vnstat
 /etc/init.d/vnstat restart
-sudo apt -y install libsqlite3-dev
+apt -y install libsqlite3-dev
 wget https://humdi.net/vnstat/vnstat-2.6.tar.gz
 tar zxvf vnstat-2.6.tar.gz
 cd vnstat-2.6
@@ -298,7 +280,7 @@ systemctl restart stunnel5
 wget https://${akbarvpn}/vpn.sh &&  chmod +x vpn.sh && ./vpn.sh
 
 # install fail2ban
-sudo apt -y install fail2ban
+apt -y install fail2ban
 
 # Instal DDOS Flate
 if [ -d '/usr/local/ddos' ]; then
@@ -438,7 +420,6 @@ wget -O renewtrgo "https://${akbarvpnnn}/renewtrgo.sh"
 wget -O cektrgo "https://${akbarvpnnn}/cektrgo.sh"
 wget -O portsshnontls "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshnontls.sh"
 wget -O portsshws "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/portsshws.sh"
-wget -O nginx-extra-port "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/websocket/nginx-extra-port.sh"
 
 wget -O sshovpnmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/sshovpn.sh"
 wget -O l2tpmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update244/main/update/l2tpmenu.sh"
@@ -456,7 +437,6 @@ wget -O setmenu "https://raw.githubusercontent.com/Mahboub-power-is-back/update2
 
 chmod +x portsshnontls
 chmod +x portsshws
-chmod +x nginx-extra-port
 
 chmod +x sshovpnmenu
 chmod +x l2tpmenu
@@ -520,13 +500,13 @@ echo "0 5 * * * root clearlog && reboot" >> /etc/crontab
 echo "0 0 * * * root xp" >> /etc/crontab
 # remove unnecessary files
 cd
-sudo apt autoclean -y
-sudo apt -y remove --purge unscd
-sudo apt-get -y --purge remove samba*;
-sudo apt-get -y --purge remove apache2*;
-sudo apt-get -y --purge remove bind9*;
-sudo apt-get -y remove sendmail*
-sudo apt autoremove -y
+apt autoclean -y
+apt -y remove --purge unscd
+apt-get -y --purge remove samba*;
+apt-get -y --purge remove apache2*;
+apt-get -y --purge remove bind9*;
+apt-get -y remove sendmail*
+apt autoremove -y
 # finishing
 cd
 chown -R www-data:www-data /home/vps/public_html

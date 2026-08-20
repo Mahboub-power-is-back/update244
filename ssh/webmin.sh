@@ -33,18 +33,18 @@ cek=$(netstat -ntlp | grep 10000 | awk '{print $7}' | cut -d'/' -f2)
 function install () {
 IP=$(wget -qO- ifconfig.co);
 echo " Adding Repositori Webmin"
-sh -c 'echo "deb http://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list'
-apt install gnupg gnupg1 gnupg2 -y
-wget http://www.webmin.com/jcameron-key.asc
-apt-key add jcameron-key.asc
+sh -c 'echo "deb https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list'
+apt-get update -y
+apt-get install -y gnupg ca-certificates wget
+wget -qO /etc/apt/trusted.gpg.d/webmin.asc https://download.webmin.com/jcameron-key.asc
 echo " Start Install Webmin"
 clear
 sleep 0.5
-apt update > /dev/null 2>&1
-apt install webmin -y
+apt-get update -y > /dev/null 2>&1
+apt-get install webmin -y
 sed -i 's/ssl=1/ssl=0/g' /etc/webmin/miniserv.conf
 /etc/init.d/webmin restart
-rm -f /root/jcameron-key.asc
+rm -f /root/jcameron-key.asc /etc/apt/trusted.gpg.d/webmin.asc
 clear
 echo ""
 echo "======================="
@@ -69,7 +69,7 @@ echo "Script By LamVpn"
 function uninstall () {
 echo " Removing Repositori Webmin"
 rm -f /etc/apt/sources.list.d/webmin.list
-apt update > /dev/null 2>&1
+apt-get update -y > /dev/null 2>&1
 echo " Start Uninstall Webmin"
 clear
 sleep 0.5
