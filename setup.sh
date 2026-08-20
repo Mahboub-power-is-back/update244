@@ -63,14 +63,23 @@ mkdir /var/lib/akbarstorevpn;
 echo "IP=" >> /var/lib/akbarstorevpn/ipvps.conf
 wget https://${akbarvpn}/cf.sh && chmod +x cf.sh && ./cf.sh
 #install v2ray
-wget https://${akbarvpnnnnnn}/ins-xray.sh && chmod +x ins-xray.sh && screen -dmS xray ./ins-xray.sh
-# Wait for Xray/ACME so the 443 nginx frontend can be installed reliably.
-for i in $(seq 1 180); do
-  if [ -s /etc/xray/xray.crt ] && [ -s /etc/xray/xray.key ] && systemctl is-active --quiet xray.service; then
-    break
-  fi
-  sleep 2
-done
+# Xray MUST finish before nginx/stunnel are installed. Running it in a detached
+# screen session caused the old installer to continue even when Xray failed.
+if ! wget -q -O /root/ins-xray.sh "https://${akbarvpnnnnnn}/ins-xray.sh"; then
+  echo "ERROR: failed to download Xray installer." >&2
+  exit 1
+fi
+chmod +x /root/ins-xray.sh
+if ! /root/ins-xray.sh 2>&1 | tee /var/log/xray-install.log; then
+  echo "ERROR: Xray installation failed. Other services will NOT be installed." >&2
+  echo "See /var/log/xray-install.log" >&2
+  exit 1
+fi
+if [ ! -s /etc/xray/xray.crt ] || [ ! -s /etc/xray/xray.key ] || ! systemctl is-active --quiet xray.service; then
+  echo "ERROR: Xray installation did not produce a healthy xray.service." >&2
+  systemctl --no-pager --full status xray.service || true
+  exit 1
+fi
 #install ssh ovpn
 wget https://${akbarvpn}/ssh-vpn.sh && chmod +x ssh-vpn.sh && screen -S ssh-vpn ./ssh-vpn.sh
 wget https://${akbarvpnn}/sstp.sh && chmod +x sstp.sh && screen -S sstp ./sstp.sh
@@ -88,7 +97,11 @@ wget https://${akbarvpnnnnnnnnn}/edu.sh && chmod +x edu.sh && ./edu.sh
 # was interrupted/restarted during a disconnected terminal session.
 mkdir -p /etc/nginx/conf.d
 wget -q -O /etc/nginx/conf.d/00-vpn-multiplex.conf "https://${akbarvpnnnnnnnnn}/nginx-multiplex.conf"
-nginx -t && systemctl reload nginx
+if ! nginx -t; then
+  echo "ERROR: nginx configuration test failed." >&2
+  exit 1
+fi
+systemctl reload nginx || systemctl restart nginx
 # Ohp Server
 wget https://${akbarvpnnnnnnnnnn}/ohp.sh && chmod +x ohp.sh && ./ohp.sh
 
@@ -143,7 +156,11 @@ echo "   - SSTP VPN                : 444"  | tee -a log-install.txt
 echo "   - Shadowsocks-R           : 1443-1543"  | tee -a log-install.txt
 echo "   - SS-OBFS TLS             : 2443-2543"  | tee -a log-install.txt
 echo "   - SS-OBFS HTTP            : 3443-3543"  | tee -a log-install.txt
-echo "   - XRAYS VMess/VLESS/Trojan public transports : 80, 443"  | tee -a log-install.txt
+echo "   - XRAYS VMess/VLESS/Trojan WS/XHTTP/HU/gRPC : 80, 443"  | tee -a log-install.txt
+
+echo "   - XRAYS VMess TCP                    : 11009 TLS, 11010 NTLS"  | tee -a log-install.txt
+echo "   - XRAYS VLESS TCP                    : 11019 TLS, 11020 NTLS"  | tee -a log-install.txt
+echo "   - XRAYS Trojan TCP                   : 11029 TLS, 11030 NTLS"  | tee -a log-install.txt
 echo "   - Trojan-Go WebSocket     : 443, 80 (/trojango)"  | tee -a log-install.txt
 echo "   - SSH WebSocket           : 443, 80 (/ssh-ws)"  | tee -a log-install.txt
 echo "   - udpcustom               : 1-65535"  | tee -a log-install.txt
