@@ -1,14 +1,36 @@
 #!/bin/bash
-clear
-cat <<EOF
-╔══════════════════════════════════════════════╗
-║          MAHBOUB TUNNEL PREMIUM             ║
-║               TROJAN-GO MENU                ║
-╠══════════════════════════════════════════════╣
-║ 1 Create  2 Delete  3 Renew  4 Check        ║
-║ 5 Change Trojan-Go WS Path                   ║
-║ 6 Main Menu  7 Exit                          ║
-╚══════════════════════════════════════════════╝
-EOF
-read -rp 'Select: ' m
-case $m in 1)addtrgo;;2)deltrgo;;3)renewtrgo;;4)cektrgo;;5)/usr/local/bin/trojango-change-path;;6)clear;menu;;7)exit;;*)exec "$0";;esac
+# MAHBOUB TUNNEL PREMIUM - Premium menu design
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_submenu 'TROJAN GO'
+ui_item 1 'Create Trojan-Go account' '➕' "$GREEN"
+ui_item 2 'Delete Trojan-Go account' '✕' "$RED"
+ui_item 3 'Extend Trojan-Go account active life' '↻' "$YELLOW"
+ui_item 4 'Check Trojan-Go user login' '👥' "$CYAN"
+ui_item 5 'Back to main menu' '‹' "$WHITE"
+ui_item 6 'Exit' '⇥' "$RED"
+ui_bottom
+ui_prompt 6
+read -r menu
+echo
+case "$menu" in
+1)
+addtrgo
+;;
+2)
+deltrgo
+;;
+3)
+renewtrgo
+;;
+4)
+cektrgo
+;;
+5)
+clear; menu
+;;
+6)
+clear; exit
+;;
+*) printf "%b\nInvalid selection. Please choose 1-6.%b\n" "$RED" "$RESET"; sleep 1; exec "$0" ;;
+esac

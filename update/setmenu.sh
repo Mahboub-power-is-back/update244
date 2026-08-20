@@ -1,46 +1,27 @@
 #!/bin/bash
-# Color definitions
-m="\033[0;1;36m"  # Cyan
-y="\033[0;1;37m"  # White
-yy="\033[0;1;32m" # Green
-yl="\033[0;1;33m" # Yellow
-wh="\033[0m"      # Reset
-# Function to display centered text
-center_text() {
-    local text="$1"
-    local width=50
-    local padding=$(( (width - ${#text}) / 2 ))
-    printf "%${padding}s" ''
-    echo -e "$text"
-}
-echo -e "$y┌─────────────────────────────────────────────────────────────────┐$wh"
-echo -e "$y│$m                       SYSTEM SETTINGS$y                           │$wh"
-echo -e "$y├─────────────────────────────────────────────────────────────────┤$wh"
-echo -e "$y│  $yy[01]$y ─ Add Or Change Subdomain Host For VPS$y                    │$wh"
-echo -e "$y│  $yy[02]$y ─ Change Port Of Some Service$y                             │$wh"
-echo -e "$y│  $yy[03]$y ─ Autobackup Data VPS$y                                     │$wh"
-echo -e "$y│  $yy[04]$y ─ Backup Data VPS$y                                         │$wh"
-echo -e "$y│  $yy[05]$y ─ Restore Data VPS$y                                        │$wh"
-echo -e "$y│  $yy[06]$y ─ Webmin Menu$y                                             │$wh"
-echo -e "$y│  $yy[07]$y ─ Limit Bandwidth Speed Server$y                            │$wh"
-echo -e "$y│  $yy[08]$y ─ Check Usage of VPS Ram$y                                  │$wh"
-echo -e "$y│  $yy[09]$y ─ Reboot VPS$y                                              │$wh"
-echo -e "$y│  $yy[10]$y ─ Speedtest VPS$y                                           │$wh"
-echo -e "$y│  $yy[11]$y ─ Displaying System Information$y                           │$wh"
-echo -e "$y│  $yy[12]$y ─ Info Script Auto Install$y                                │$wh"
-echo -e "$y│  $yy[13]$y ─ Nginx Extra Ports (80/443 Safe)$y                      │$wh"
-echo -e "$y│  $yy[14]$y ─ Main Menu$y                                               │$wh"
-echo -e "$y│  $yy[15]$y ─ Exit$y                                                    │$wh"
-echo -e "$y├─────────────────────────────────────────────────────────────────┤$wh"
-echo -e "$y│$m                   Autoscript By : mahboub-million$y               │$wh"
-echo -e "$y└─────────────────────────────────────────────────────────────────┘$wh"
+# MAHBOUB TUNNEL PREMIUM - Premium menu design
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_submenu 'SYSTEM SETTINGS'
+ui_item 1 'Add / change subdomain host' '🌐' "$CYAN"
+ui_item 2 'Change service ports' '⚙' "$YELLOW"
+ui_item 3 'Autobackup VPS data' '▣' "$GREEN"
+ui_item 4 'Backup VPS data' '▣' "$GREEN"
+ui_item 5 'Restore VPS data' '↻' "$RED"
+ui_item 6 'Webmin menu' '▣' "$BLUE"
+ui_item 7 'Limit server bandwidth speed' '⇅' "$PURPLE"
+ui_item 8 'Check VPS RAM usage' '◉' "$CYAN"
+ui_item 9 'Reboot VPS' '↻' "$RED"
+ui_item 10 'VPS speed test' '⚡' "$GREEN"
+ui_item 11 'Display system information' 'ⓘ' "$WHITE"
+ui_item 12 'About / auto-install info' 'ⓘ' "$CYAN"
+ui_item 13 'Back to main menu' '‹' "$WHITE"
+ui_item 14 'Exit' '⇥' "$RED"
+ui_bottom
+ui_prompt 14
+read -r menu
 echo
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│   Select From Options [ 1 - 15 ]         │')$wh"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
-echo
-read -p "$(echo -e "$y│ $whSelect option: $y")" menu
-case $menu in
+case "$menu" in
 1)
 addhost
 ;;
@@ -78,21 +59,10 @@ info
 about
 ;;
 13)
-clear
-/usr/local/bin/nginx-extra-port
+clear; menu
 ;;
 14)
-clear
-menu
+clear; exit
 ;;
-15)
-clear
-exit
-;;
-*)
-clear
-echo -e "$yl❌  Invalid selection! Please try again.$wh"
-sleep 2
-setmenu
-;;
+*) printf "%b\nInvalid selection. Please choose 1-14.%b\n" "$RED" "$RESET"; sleep 1; exec "$0" ;;
 esac

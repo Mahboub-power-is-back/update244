@@ -1,133 +1,36 @@
 #!/bin/bash
-# Color definitions
-m="\033[0;1;36m"  # Cyan
-y="\033[0;1;37m"  # White
-yy="\033[0;1;32m" # Green
-yl="\033[0;1;33m" # Yellow
-wh="\033[0m"      # Reset
-# Function to display centered text
-center_text() {
-    local text="$1"
-    local width=50
-    local padding=$(( (width - ${#text}) / 2 ))
-    printf "%${padding}s" ''
-    echo -e "$text"
-}
-# Function to get system information
-get_system_info() {
-    # Get OS information
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$PRETTY_NAME
-    else
-        OS=$(uname -s)
-    fi
-    # Get domain from /etc/xray/domain if available
-    if [ -f /etc/xray/domain ]; then
-        DOMAIN=$(cat /etc/xray/domain)
-    else
-        DOMAIN=$(hostname -f 2>/dev/null || hostname)
-    fi
-    # Get current time
-    TIME=$(date '+%Y-%m-%d %H:%M:%S')
-    # Get online users (SSH connections)
-    ONLINE_USERS=$(who | cut -d' ' -f1 | sort -u | wc -l)
-}
-# Get system information
-get_system_info
-# Display header with system info
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│              SYSTEM INFO                 │')$wh"
-echo -e "$y$(center_text '├──────────────────────────────────────────┤')$wh"
-echo -e "$y   │$yy OS:    $yl$OS$y"
-echo -e "$y   │$yy Domain:$yl $DOMAIN$y"
-echo -e "$y   │$yy Time:  $yl $TIME$y"
-echo -e "$y   │$yy Users: $yl $ONLINE_USERS Connected$y"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
+# MAHBOUB TUNNEL PREMIUM - Main menu (design only)
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_header
+ui_info
+ui_title 'MAIN MENU'
+printf '%b│   %b[01]%b  🔐 SSH & OPENVPN                 %b[06]%b  ➤ SHADOWSOCKS%b│%b\n' "$GRAY" "$GREEN" "$RESET" "$PURPLE" "$RESET" "$RESET"
+printf '%b│   %b[02]%b  🔒 L2TP / IPSEC VPN              %b[07]%b  ➤ SHADOWSOCKS-R%b│%b\n' "$GRAY" "$GREEN" "$RESET" "$CYAN" "$RESET" "$RESET"
+printf '%b│   %b[03]%b  🔒 PPTP VPN                       %b[08]%b  V VMESS (XRAY)%b│%b\n' "$GRAY" "$GREEN" "$RESET" "$BLUE" "$RESET" "$RESET"
+printf '%b│   %b[04]%b  🛡 SSTP VPN                       %b[09]%b  V VLESS (XRAY)%b│%b\n' "$GRAY" "$GREEN" "$RESET" "$GREEN" "$RESET" "$RESET"
+printf '%b│   %b[05]%b  ● WIREGUARD VPN                   %b[10]%b  T TROJAN (XRAY)%b│%b\n' "$GRAY" "$GREEN" "$RESET" "$RED" "$RESET" "$RESET"
+printf '%b│%b\n' "$GRAY"
+printf '%b│                         %b[11]%b  ➤ TROJAN GO%b\n' "$GRAY" "$RED" "$RESET" "$RED"
+printf '%b│                         %b[12]%b  ⚙ SETTINGS%b\n' "$GRAY" "$YELLOW" "$RESET" "$YELLOW"
+printf '%b│                         %b[13]%b  ⇥ EXIT%b\n' "$GRAY" "$RED" "$RESET" "$RED"
+ui_bottom
+ui_prompt 13
+read -r menu
 echo
-# Main Menu
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│             MAIN MENU                    │')$wh"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
-echo
-echo -e "$y  ┌───┬────────────────────────────────────────┐$wh"
-echo -e "$y  │$yy 1 $y│  SSH & OpenVPN MENU                   $y │$wh"
-echo -e "$y  │$yy 2 $y│  L2TP MENU                            $y │$wh"
-echo -e "$y  │$yy 3 $y│  PPTP MENU                            $y │$wh"
-echo -e "$y  │$yy 4 $y│  SSTP MENU                            $y │$wh"
-echo -e "$y  │$yy 5 $y│  WIREGUARD MENU                       $y │$wh"
-echo -e "$y  │$yy 6 $y│  SHADOWSOCKS MENU                     $y │$wh"
-echo -e "$y  │$yy 7 $y│  SHADOWSOCKSR MENU                    $y │$wh"
-echo -e "$y  │$yy 8 $y│  VMESS MENU                           $y │$wh"
-echo -e "$y  │$yy 9 $y│  VLESS MENU                           $y │$wh"
-echo -e "$y  │$yy 10$y│  TROJAN GFW MENU                      $y │$wh"
-echo -e "$y  │$yy 11$y│  TROJAN GO MENU                       $y │$wh"
-echo -e "$y  │$yy 12$y│  Settings                             $y │$wh"
-echo -e "$y  │$yy 13$y│  Exit                                 $y │$wh"
-echo -e "$y  └───┴────────────────────────────────────────┘$wh"
-echo
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│   Select From Options [ 1 - 13 ]         │')$wh"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
-echo
-read -p "$(echo -e "$y│ $whSelect option: $y")" menu
-case $menu in
-1)
-clear
-sshovpnmenu
-;;
-2)
-clear
-l2tpmenu
-;;
-3)
-clear
-pptpmenu
-;;
-4)
-clear
-sstpmenu
-;;
-5)
-clear
-wgmenu
-;;
-6)
-clear
-ssmenu
-;;
-7)
-clear
-ssrmenu
-;;
-8)
-clear
-vmessmenu
-;;
-9)
-clear
-vlessmenu
-;;
-10)
-clear
-trmenu
-;;
-11)
-clear
-trgomenu
-;;
-12)
-clear
-setmenu
-;;
-13)
-clear
-exit
-;;
-*)
-clear
-echo -e "$yl Invalid selection. Please try again.$wh"
-sleep 2
-menu
-;;
+case "$menu" in
+1) clear; sshovpnmenu ;;
+2) clear; l2tpmenu ;;
+3) clear; pptpmenu ;;
+4) clear; sstpmenu ;;
+5) clear; wgmenu ;;
+6) clear; ssmenu ;;
+7) clear; ssrmenu ;;
+8) clear; vmessmenu ;;
+9) clear; vlessmenu ;;
+10) clear; trmenu ;;
+11) clear; trgomenu ;;
+12) clear; setmenu ;;
+13) clear; exit 0 ;;
+*) printf '%b\nInvalid selection. Please choose 1-13.%b\n' "$RED" "$RESET"; sleep 1; exec "$0" ;;
 esac

@@ -1,14 +1,36 @@
 #!/bin/bash
-clear
-cat <<EOF
-╔══════════════════════════════════════════════╗
-║          MAHBOUB TUNNEL PREMIUM             ║
-║                 VLESS MENU                  ║
-╠══════════════════════════════════════════════╣
-║ 1 Create  2 Delete  3 Renew  4 Check        ║
-║ 5 Change Xray WS Paths                       ║
-║ 6 Main Menu  7 Exit                          ║
-╚══════════════════════════════════════════════╝
-EOF
-read -rp 'Select: ' m
-case $m in 1)addvless;;2)delvless;;3)renewvless;;4)cekvless;;5)/usr/local/bin/xray-change-path;;6)clear;menu;;7)exit;;*)exec "$0";;esac
+# MAHBOUB TUNNEL PREMIUM - Premium menu design
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_submenu 'VLESS • XRAY'
+ui_item 1 'Create VLESS WebSocket account' '➕' "$GREEN"
+ui_item 2 'Delete VLESS WebSocket account' '✕' "$RED"
+ui_item 3 'Extend VLESS account active life' '↻' "$YELLOW"
+ui_item 4 'Check VLESS user login' '👥' "$CYAN"
+ui_item 5 'Back to main menu' '‹' "$WHITE"
+ui_item 6 'Exit' '⇥' "$RED"
+ui_bottom
+ui_prompt 6
+read -r menu
+echo
+case "$menu" in
+1)
+addvless
+;;
+2)
+delvless
+;;
+3)
+renewvless
+;;
+4)
+cekvless
+;;
+5)
+clear; menu
+;;
+6)
+clear; exit
+;;
+*) printf "%b\nInvalid selection. Please choose 1-6.%b\n" "$RED" "$RESET"; sleep 1; exec "$0" ;;
+esac

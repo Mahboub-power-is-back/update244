@@ -1,40 +1,18 @@
 #!/bin/bash
-# Color definitions
-m="\033[0;1;36m"
-y="\033[0;1;37m"
-yy="\033[0;1;32m"
-yl="\033[0;1;33m"
-wh="\033[0m"
-
-# Function to display centered text
-center_text() {
-    local text="$1"
-    local width=50
-    local padding=$(( (width - ${#text}) / 2 ))
-    printf "%${padding}s" ''
-    echo -e "$text"
-}
-
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│              WIREGUARD MENU              │')$wh"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
+# MAHBOUB TUNNEL PREMIUM - Premium menu design
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_submenu 'WIREGUARD VPN'
+ui_item 1 'Create WireGuard account' '➕' "$GREEN"
+ui_item 2 'Delete WireGuard account' '✕' "$RED"
+ui_item 3 'Extend WireGuard account active life' '↻' "$YELLOW"
+ui_item 4 'Back to main menu' '‹' "$WHITE"
+ui_item 5 'Exit' '⇥' "$RED"
+ui_bottom
+ui_prompt 5
+read -r menu
 echo
-echo -e "$y  ┌───┬────────────────────────────────────────┐$wh"
-echo -e "$y  │$yy 1 $y│  Create Account Wireguard             $y │$wh"
-echo -e "$y  │$yy 2 $y│  Delete Account Wireguard             $y │$wh"
-echo -e "$y  │$yy 3 $y│  Extend Account Active Life           $y │$wh"
-echo -e "$y  │$yy 4 $y│  Menu Utama                           $y │$wh"
-echo -e "$y  │$yy 5 $y│  Exit                                 $y │$wh"
-echo -e "$y  └───┴────────────────────────────────────────┘$wh"
-echo
-echo -e "$y$(center_text '┌──────────────────────────────────────────┐')$wh"
-echo -e "$y$(center_text '│     Select From Options [ 1 - 5 ]        │')$wh"
-echo -e "$y$(center_text '└──────────────────────────────────────────┘')$wh"
-echo
-read -p "$(echo -e "$y│ $whSelect option: $y")" menu
-echo -e ""
-
-case $menu in
+case "$menu" in
 1)
 addwg
 ;;
@@ -45,15 +23,10 @@ delwg
 renewwg
 ;;
 4)
-clear
-menu
+clear; menu
 ;;
 5)
-clear
-exit
+clear; exit
 ;;
-*)
-clear
-menu
-;;
+*) printf "%b\nInvalid selection. Please choose 1-5.%b\n" "$RED" "$RESET"; sleep 1; exec "$0" ;;
 esac

@@ -1,21 +1,18 @@
 #!/bin/bash
-clear
-m="\033[0;1;36m"
-y="\033[0;1;37m"
-yy="\033[0;1;32m"
-yl="\033[0;1;33m"
-wh="\033[0m"
-echo -e "$y                             L2TP $wh"
-echo -e "$y-------------------------------------------------------------$wh"
-echo -e "$yy 1$y. Create Account L2TP"
-echo -e "$yy 2$y. Delete Account L2TP"
-echo -e "$yy 3$y. Extending Account L2TP Active Life"
-echo -e "$yy 4$y. Menu"
-echo -e "$yy 5$y. Exit"
-echo -e "$y-------------------------------------------------------------$wh"
-read -p "Select From Options [ 1 - 7 ] : " menu
-echo -e ""
-case $menu in
+# MAHBOUB TUNNEL PREMIUM - Premium menu design
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -r "$BASE_DIR/ui.sh" ] && . "$BASE_DIR/ui.sh"
+ui_submenu 'L2TP / IPSEC VPN'
+ui_item 1 'Create L2TP account' '➕' "$GREEN"
+ui_item 2 'Delete L2TP account' '✕' "$RED"
+ui_item 3 'Extend L2TP account active life' '↻' "$YELLOW"
+ui_item 4 'Back to main menu' '‹' "$WHITE"
+ui_item 5 'Exit' '⇥' "$RED"
+ui_bottom
+ui_prompt 5
+read -r menu
+echo
+case "$menu" in
 1)
 addl2tp
 ;;
@@ -26,15 +23,10 @@ dell2tp
 renewl2tp
 ;;
 4)
-clear
-menu
+clear; menu
 ;;
 5)
-clear
-exit
+clear; exit
 ;;
-*)
-clear
-menu
-;;
+*) printf "%b\nInvalid selection. Please choose 1-5.%b\n" "$RED" "$RESET"; sleep 1; exec "$0" ;;
 esac
