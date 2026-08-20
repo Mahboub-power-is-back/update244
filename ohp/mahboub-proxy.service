@@ -1,0 +1,17 @@
+[Unit]
+Description=MAHBOUB PROXY PREMIUM - OHP HTTP Proxy 8484
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 127.0.0.1 --port 8484
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

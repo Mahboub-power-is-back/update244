@@ -33,6 +33,37 @@ chmod +x ohpserver
 cp ohpserver /usr/local/bin/ohpserver
 /bin/rm -rf ohpserver*
 
+# MAHBOUB PROXY PREMIUM - local HTTP/CONNECT proxy on 8484
+# This proxy is intentionally bound to localhost and is used by OHP as its
+# HTTP proxy layer.  The existing Squid service on 3128 is left untouched.
+if ! command -v python3 >/dev/null 2>&1; then
+    apt-get update -y
+    apt-get install -y python3
+fi
+install -m 0755 "${SCRIPT_DIR:-$(dirname "$0")}/mahboub-proxy.py" /usr/local/bin/mahboub-proxy.py
+cat > /etc/systemd/system/mahboub-proxy.service << 'ENDPROXY'
+[Unit]
+Description=MAHBOUB PROXY PREMIUM - OHP HTTP Proxy 8484
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 127.0.0.1 --port 8484
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+ENDPROXY
+
+systemctl daemon-reload
+systemctl enable --now mahboub-proxy.service
+
 # Installing Service
 # SSH OHP Port 8181
 cat > /etc/systemd/system/ssh-ohp.service << END
@@ -47,7 +78,7 @@ User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
-ExecStart=/usr/local/bin/ohpserver -port 8181 -proxy 127.0.0.1:3128 -tunnel 127.0.0.1:22
+ExecStart=/usr/local/bin/ohpserver -port 8181 -proxy 127.0.0.1:8484 -tunnel 127.0.0.1:22
 Restart=on-failure
 LimitNOFILE=infinity
 
@@ -68,7 +99,7 @@ User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
-ExecStart=/usr/local/bin/ohpserver -port 8282 -proxy 127.0.0.1:3128 -tunnel 127.0.0.1:109
+ExecStart=/usr/local/bin/ohpserver -port 8282 -proxy 127.0.0.1:8484 -tunnel 127.0.0.1:109
 Restart=on-failure
 LimitNOFILE=infinity
 
@@ -89,7 +120,7 @@ User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
-ExecStart=/usr/local/bin/ohpserver -port 8383 -proxy 127.0.0.1:3128 -tunnel 127.0.0.1:1194
+ExecStart=/usr/local/bin/ohpserver -port 8383 -proxy 127.0.0.1:8484 -tunnel 127.0.0.1:1194
 Restart=on-failure
 LimitNOFILE=infinity
 
@@ -105,9 +136,17 @@ systemctl restart dropbear-ohp
 systemctl enable openvpn-ohp
 systemctl restart openvpn-ohp
 #------------------------------
+printf 'MAHBOUB PROXY 8484: %s\n' "$(systemctl is-active mahboub-proxy.service)"
 printf 'INSTALLATION COMPLETED !\n'
 sleep 0.5
 printf 'CHECKING LISTENING PORT\n'
+if [ -n "$(ss -tupln | grep -w ':8484' | grep -E 'python3|mahboub-proxy')" ]
+then
+	echo 'MAHBOUB PROXY 8484 Running'
+else
+	echo 'MAHBOUB PROXY 8484 Not Found, please check manually'
+fi
+sleep 0.5
 if [ -n "$(ss -tupln | grep ohpserver | grep -w 8181)" ]
 then
 	echo 'SSH OHP Redirection Running'
