@@ -15,8 +15,8 @@ LIGHT='\033[0;37m'
 MYIP=$(wget -qO- ipinfo.io/ip);
 clear
 domain=$(cat /etc/xray/domain)
-tls="$(cat ~/log-install.txt | grep -w "Vmess TLS" | cut -d: -f2|sed 's/ //g')"
-nontls="$(cat ~/log-install.txt | grep -w "Vmess None TLS" | cut -d: -f2|sed 's/ //g')"
+tls="443"
+nontls="80"
 until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${CLIENT_EXISTS} == '0' ]]; do
 		read -rp "Username : " -e user
 		CLIENT_EXISTS=$(grep -w $user /etc/xray/config.json | wc -l)
@@ -31,10 +31,8 @@ uuid=$(cat /proc/sys/kernel/random/uuid)
 read -p "Expired (Days) : " masaaktif
 hariini=`date -d "0 days" +"%Y-%m-%d"`
 exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
-sed -i '/#xray-vmess-tls$/a\### '"$user $exp"'\
-},{"id": "'""$uuid""'"' /etc/xray/config.json
-sed -i '/#xray-vmess-nontls$/a\### '"$user $exp"'\
-},{"id": "'""$uuid""'"' /etc/xray/config.json
+sed -i '/#xray-vmess$/a\### '"$user $exp"'\
+},{"id": "'""$uuid""'","email": "'""$user""'"' /etc/xray/config.json
 cat>/etc/xray/vmess-$user-tls.json<<EOF
       {
       "v": "2",
@@ -62,7 +60,7 @@ cat>/etc/xray/vmess-$user-nontls.json<<EOF
       "path": "/vmess/",
       "type": "none",
       "host": "",
-      "tls": "none"
+      "tls": "tls"
 }
 EOF
 vmess_base641=$( base64 -w 0 <<< $vmess_json1)

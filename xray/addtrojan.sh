@@ -32,7 +32,7 @@ domain=$(cat /etc/xray/domain)
 else
 domain=$IP
 fi
-tr="$(cat ~/log-install.txt | grep -w "Trojan" | cut -d: -f2|sed 's/ //g')"
+tr="443"
 until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${user_EXISTS} == '0' ]]; do
 		read -rp "Password : " -e user
 		user_EXISTS=$(grep -w $user /etc/xray/config.json | wc -l)
@@ -49,7 +49,8 @@ exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
 sed -i '/#xray-trojan$/a\#&# '"$user $exp"'\
 },{"password": "'""$user""'","email": "'""$user""'"' /etc/xray/config.json
 systemctl restart xray.service
-trojanlink="trojan://${user}@${domain}:${tr}"
+trojanlink443="trojan://${user}@${domain}:443?security=tls&type=ws&path=%2Ftrojan%2F#${user}"
+trojanlink80="trojan://${user}@${domain}:80?security=tls&type=ws&path=%2Ftrojan%2F#${user}"
 service cron restart
 clear
 echo -e ""
@@ -57,11 +58,12 @@ echo -e "======-XRAYS/TROJAN-======"
 echo -e "Remarks  : ${user}"
 echo -e "IP/Host  : ${MYIP}"
 echo -e "Address  : ${domain}"
-echo -e "Port     : ${tr}"
+echo -e "Port     : 443, 80 (TLS/WS)"
 echo -e "Key      : ${user}"
 echo -e "Created  : $hariini"
 echo -e "Expired  : $exp"
 echo -e "=========================="
-echo -e "Link TR  : ${trojanlink}"
+echo -e "Link TR 443: ${trojanlink443}"
+echo -e "Link TR 80 : ${trojanlink80}"
 echo -e "=========================="
 echo -e "Script By Akbar Maulana"
