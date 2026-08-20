@@ -63,21 +63,13 @@ mkdir /var/lib/akbarstorevpn;
 echo "IP=" >> /var/lib/akbarstorevpn/ipvps.conf
 wget https://${akbarvpn}/cf.sh && chmod +x cf.sh && ./cf.sh
 #install v2ray
-# Xray MUST finish before nginx/stunnel are installed. Running it in a detached
-# screen session caused the old installer to continue even when Xray failed.
-if ! wget -q -O /root/ins-xray.sh "https://${akbarvpnnnnnn}/ins-xray.sh"; then
-  echo "ERROR: failed to download Xray installer." >&2
+wget -q https://${akbarvpnnnnnn}/ins-xray.sh -O /root/ins-xray.sh && chmod +x /root/ins-xray.sh
+if ! /root/ins-xray.sh; then
+  echo "ERROR: Xray installation failed. Stopping setup before installing dependent services." >&2
   exit 1
 fi
-chmod +x /root/ins-xray.sh
-if ! /root/ins-xray.sh 2>&1 | tee /var/log/xray-install.log; then
-  echo "ERROR: Xray installation failed. Other services will NOT be installed." >&2
-  echo "See /var/log/xray-install.log" >&2
-  exit 1
-fi
-if [ ! -s /etc/xray/xray.crt ] || [ ! -s /etc/xray/xray.key ] || ! systemctl is-active --quiet xray.service; then
-  echo "ERROR: Xray installation did not produce a healthy xray.service." >&2
-  systemctl --no-pager --full status xray.service || true
+if ! systemctl is-active --quiet xray.service; then
+  echo "ERROR: xray.service was not created or is not active. Stopping setup." >&2
   exit 1
 fi
 #install ssh ovpn
@@ -97,11 +89,7 @@ wget https://${akbarvpnnnnnnnnn}/edu.sh && chmod +x edu.sh && ./edu.sh
 # was interrupted/restarted during a disconnected terminal session.
 mkdir -p /etc/nginx/conf.d
 wget -q -O /etc/nginx/conf.d/00-vpn-multiplex.conf "https://${akbarvpnnnnnnnnn}/nginx-multiplex.conf"
-if ! nginx -t; then
-  echo "ERROR: nginx configuration test failed." >&2
-  exit 1
-fi
-systemctl reload nginx || systemctl restart nginx
+nginx -t && systemctl reload nginx
 # Ohp Server
 wget https://${akbarvpnnnnnnnnnn}/ohp.sh && chmod +x ohp.sh && ./ohp.sh
 
