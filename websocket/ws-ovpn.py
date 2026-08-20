@@ -7,7 +7,7 @@ import time
 import getopt
 
 # Listen
-LISTENING_ADDR = '0.0.0.0'
+LISTENING_ADDR = '127.0.0.1'
 LISTENING_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8880
 
 # Pass
