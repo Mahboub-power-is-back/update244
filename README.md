@@ -71,29 +71,9 @@ rm -f setup.sh && sysctl -w net.ipv6.conf.all.disable_ipv6=1 && sysctl -w net.ip
 
 • SS-OBFS HTTP            : 3443-3543
 
-• XRAYS Vmess TLS         : 8443
-
-• XRAYS Vmess None TLS    : 80
-
-• XRAYS Vless TLS         : 8443
-
-• XRAYS Vless None TLS    : 80
-
-• XRAYS Trojan ws TLS     : 8443
-
-• Websocket TLS           : 443
-
-• Websocket None TLS      : 8880
-
-• Websocket Ovpn          : 2086
-
-• OHP SSH                 : 8181
-
-• OHP Dropbear            : 8282
-
-• OHP OpenVPN             : 8383
-
-• Trojan Go               : 2087
+• XRAY VMess/VLESS/Trojan public transports : 80, 443
+• Trojan-Go WebSocket                         : 80, 443 (/trojango)
+• SSH WebSocket                               : 80, 443 (/ssh-ws)
 
  ### Server Information & Other Features
 
@@ -126,3 +106,14 @@ rm -f setup.sh && sysctl -w net.ipv6.conf.all.disable_ipv6=1 && sysctl -w net.ip
 **Telegram**
 ------------
 [Senovpn](https://t.me/senovpn)
+
+
+### Shared public ports
+Port 80 and 443 are multiplexed by nginx. Xray VMess/VLESS/Trojan, Trojan-Go, SSH WebSocket and OpenVPN WebSocket use distinct WebSocket paths and private localhost backends.
+
+- VMess: `/vmess/`
+- VLESS: `/vless/`
+- Trojan: `/trojan/`
+- Trojan-Go: `/trojango`
+- SSH WebSocket: `/ssh-ws`
+- OpenVPN WebSocket: `/ovpn-ws`
