@@ -4,7 +4,7 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 if [ -r "$BASE_DIR/ui.sh" ]; then . "$BASE_DIR/ui.sh"; elif [ -r /usr/bin/ui.sh ]; then . /usr/bin/ui.sh; else echo "ERROR: ui.sh not found"; exit 1; fi
 ui_submenu 'SYSTEM SETTINGS'
 ui_item 1 'Add / change subdomain host' '🌐' "$CYAN"
-ui_item 2 'Change service ports' '⚙' "$YELLOW"
+ui_item 2 'PORT SETTINGS' '⚙' "$YELLOW"
 ui_item 3 'Autobackup VPS data' '▣' "$GREEN"
 ui_item 4 'Backup VPS data' '▣' "$GREEN"
 ui_item 5 'Restore VPS data' '↻' "$RED"
