@@ -33,6 +33,60 @@ chmod +x ohpserver
 cp ohpserver /usr/local/bin/ohpserver
 /bin/rm -rf ohpserver*
 
+# MAHBOUB PROXY MODES
+# 01 = OVPN / SSH Python tunnel (X-Real-Host style)
+# 02 = Direct HTTP/CONNECT proxy
+# Both modes use public port 80; the menu makes them mutually exclusive.
+for f in mahboub-http-tunnel.py mahboub-proxy.py; do
+    if [ -f "/root/$f" ]; then
+        cp "/root/$f" "/usr/local/bin/$f"
+        chmod +x "/usr/local/bin/$f"
+    fi
+done
+
+cat > /etc/systemd/system/http-tunnel.service << 'END_HTTP_TUNNEL'
+[Unit]
+Description=MAHBOUB PROXY - OVPN SSH Python Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port 80
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+END_HTTP_TUNNEL
+
+cat > /etc/systemd/system/mahboub-proxy.service << 'END_DIRECT_PROXY'
+[Unit]
+Description=MAHBOUB PROXY - Direct HTTP CONNECT Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 0.0.0.0 --port 80
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+END_DIRECT_PROXY
+
+systemctl daemon-reload
+systemctl disable --now http-tunnel.service >/dev/null 2>&1 || true
+systemctl disable --now mahboub-proxy.service >/dev/null 2>&1 || true
+
 # Installing Service
 # SSH OHP Port 8181
 cat > /etc/systemd/system/ssh-ohp.service << END

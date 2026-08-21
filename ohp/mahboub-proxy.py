@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MAHBOUB PROXY PREMIUM
+MAHBOUB PROXY
 Python 3 HTTP proxy for local/OHP integration.
 
 Default listener: 127.0.0.1:8484
@@ -46,8 +46,8 @@ RED = "\033[91m"
 def banner():
     lines = [
         "╔══════════════════════════════════════════════════════════════╗",
-        "║              MAHBOUB PROXY • PREMIUM                       ║",
-        "║            Fast • Stable • HTTP / CONNECT                  ║",
+        "║                    MAHBOUB PROXY                           ║",
+        "║                  HTTP / CONNECT                            ║",
         "╠══════════════════════════════════════════════════════════════╣",
         "║  [01] HTTP Proxy                                            ║",
         "║  [02] CONNECT Tunnel                                        ║",

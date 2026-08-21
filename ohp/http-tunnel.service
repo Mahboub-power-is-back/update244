@@ -1,17 +1,16 @@
 [Unit]
-Description=MAHBOUB PROXY - Direct HTTP CONNECT Proxy
+Description=MAHBOUB PROXY - OVPN SSH Python Tunnel
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 0.0.0.0 --port 80
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port 80
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=65535
 NoNewPrivileges=true
-PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
