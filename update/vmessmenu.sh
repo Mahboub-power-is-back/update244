@@ -3,10 +3,10 @@
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 if [ -r "$BASE_DIR/ui.sh" ]; then . "$BASE_DIR/ui.sh"; elif [ -r /usr/bin/ui.sh ]; then . /usr/bin/ui.sh; else echo "ERROR: ui.sh not found"; exit 1; fi
 ui_submenu 'VMESS • XRAY'
-ui_item 1 'Create VMess WebSocket account' '➕' "$GREEN"
+ui_item 1 'Create VMess account (WS / XHTTP / HTTP-UP / gRPC / TCP)' '➕' "$GREEN"
 ui_item 2 'Delete VMess WebSocket account' '✕' "$RED"
 ui_item 3 'Extend VMess account active life' '↻' "$YELLOW"
-ui_item 4 'Check VMess user login' '👥' "$CYAN"
+ui_item 4 'List VMess accounts & credentials' '👥' "$CYAN"
 ui_item 5 'Renew VMess certificate' '🔑' "$BLUE"
 ui_item 6 'Back to main menu' '‹' "$WHITE"
 ui_item 7 'Exit' '⇥' "$RED"
