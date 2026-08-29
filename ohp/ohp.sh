@@ -36,13 +36,17 @@ cp ohpserver /usr/local/bin/ohpserver
 # MAHBOUB PROXY MODES
 # 01 = OVPN / SSH Python tunnel (X-Real-Host style)
 # 02 = Direct HTTP/CONNECT proxy
-# Both modes use public port 80; the menu makes them mutually exclusive.
+# Both modes use a user-selectable public port; the menu makes them mutually exclusive.
 for f in mahboub-http-tunnel.py mahboub-proxy.py; do
     if [ -f "/root/$f" ]; then
         cp "/root/$f" "/usr/local/bin/$f"
         chmod +x "/usr/local/bin/$f"
     fi
 done
+
+mkdir -p /etc/default
+[ -f /etc/default/mahboub-http-tunnel ] || echo 'HTTP_TUNNEL_PORT=80' > /etc/default/mahboub-http-tunnel
+[ -f /etc/default/mahboub-proxy ] || echo 'HTTP_PROXY_PORT=80' > /etc/default/mahboub-proxy
 
 cat > /etc/systemd/system/http-tunnel.service << 'END_HTTP_TUNNEL'
 [Unit]
@@ -53,7 +57,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port 80
+EnvironmentFile=-/etc/default/mahboub-http-tunnel
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port ${HTTP_TUNNEL_PORT}
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=65535
@@ -72,7 +77,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 0.0.0.0 --port 80
+EnvironmentFile=-/etc/default/mahboub-proxy
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-proxy.py --bind 0.0.0.0 --port ${HTTP_PROXY_PORT}
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=65535
