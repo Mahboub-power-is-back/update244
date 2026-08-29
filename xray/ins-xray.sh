@@ -250,8 +250,8 @@ show_vless(){
         echo "gRPC NTLS : vless://${uuid}@${domain}:80?encryption=none&security=none&type=grpc&serviceName=${vg}#${user}"
         echo
         echo "[ RAW / TCP ]"
-        echo "TCP TLS   : vless://${uuid}@${domain}:11019?encryption=none&security=tls&type=tcp&sni=${domain}#${user}"
-        echo "TCP NTLS  : vless://${uuid}@${domain}:11020?encryption=none&security=none&type=tcp#${user}"
+        echo "RAW TLS   : vless://${uuid}@${domain}:11019?encryption=none&security=tls&type=tcp&sni=${domain}#${user}"
+        echo "RAW NTLS  : vless://${uuid}@${domain}:11020?encryption=none&security=none&type=tcp#${user}"
     } > "$file"
 }
 
@@ -325,8 +325,8 @@ show_trojan(){
         echo "gRPC NTLS : trojan://${uuid}@${domain}:80?security=none&type=grpc&serviceName=${tg}#${user}"
         echo
         echo "[ RAW / TCP ]"
-        echo "TCP TLS   : trojan://${uuid}@${domain}:11029?security=tls&type=tcp&sni=${domain}#${user}"
-        echo "TCP NTLS  : trojan://${uuid}@${domain}:11030?security=none&type=tcp#${user}"
+        echo "RAW TLS   : trojan://${uuid}@${domain}:11029?security=tls&type=tcp&sni=${domain}#${user}"
+        echo "RAW NTLS  : trojan://${uuid}@${domain}:11030?security=none&type=tcp#${user}"
     } > "$file"
 }
 
@@ -350,14 +350,14 @@ show_links(){
     local i=1 label link label_raw
     while IFS= read -r line; do
         case "$line" in
-            WS*|XHTTP*|HU*|gRPC*|TCP*) ;;
+            WS*|XHTTP*|HU*|gRPC*|TCP*|RAW*) ;;
             *) continue ;;
         esac
         label_raw="${line%%:*}"
         label="$(printf '%s' "$label_raw" | xargs)"
         link="${line#*: }"
         case "$label" in
-            "WS TLS"|"WS NTLS"|"XHTTP TLS"|"XHTTP NTLS"|"gRPC TLS"|"gRPC NTLS"|"TCP TLS"|"TCP NTLS") ;;
+            "WS TLS"|"WS NTLS"|"XHTTP TLS"|"XHTTP NTLS"|"gRPC TLS"|"gRPC NTLS"|"TCP TLS"|"TCP NTLS"|"RAW TLS"|"RAW NTLS") ;;
             "HU TLS") label="HTTP-UP TLS" ;;
             "HU NTLS") label="HTTP-UP NTLS" ;;
             *) continue ;;
