@@ -6,7 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port 80
+EnvironmentFile=-/etc/default/mahboub-http-tunnel
+ExecStart=/usr/bin/python3 /usr/local/bin/mahboub-http-tunnel.py --bind 0.0.0.0 --port ${HTTP_TUNNEL_PORT}
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=65535
